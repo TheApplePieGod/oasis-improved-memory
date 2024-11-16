@@ -12,11 +12,15 @@ And to use the most powerful version of the model, be sure to check out the [liv
 
 ## Setup
 ```
-git clone https://github.com/etched-ai/open-oasis.git
-cd open-oasis
-# Install pytorch
+conda create -n oasis-mem python==3.11
+conda activate oasis-mem
+
+# Macos
+pip install torch torchvision
+
+# Windows
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
-# Install other dependencies
+
 pip install einops diffusers timm av
 ```
 

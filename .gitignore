@@ -1,1 +1,4 @@
 **/.DS_Store
+**/*.safetensors
+**/__pycache__
+**/*.mp4

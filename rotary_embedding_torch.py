@@ -14,6 +14,8 @@ from einops import rearrange, repeat
 
 from typing import Literal
 
+from config import default_device
+
 # helper functions
 
 
@@ -43,7 +45,7 @@ def rotate_half(x):
     return rearrange(x, "... d r -> ... (d r)")
 
 
-@autocast("cuda", enabled=False)
+@autocast(default_device, enabled=False)
 def apply_rotary_emb(freqs, t, start_index=0, scale=1.0, seq_dim=-2):
     dtype = t.dtype
 
@@ -285,7 +287,7 @@ class RotaryEmbedding(Module):
         all_freqs = broadcast_tensors(*all_freqs)
         return torch.cat(all_freqs, dim=-1)
 
-    @autocast("cuda", enabled=False)
+    @autocast(default_device, enabled=False)
     def forward(self, t: Tensor, freqs: Tensor, seq_len=None, offset=0):
         should_cache = self.cache_if_possible and not self.learned_freq and exists(seq_len) and self.freqs_for != "pixel" and (offset + seq_len) <= self.cache_max_seq_len
 
