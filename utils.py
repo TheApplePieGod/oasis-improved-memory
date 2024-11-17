@@ -10,6 +10,11 @@ from torchvision.io import read_image, read_video
 from torchvision.transforms.functional import resize
 from einops import rearrange
 from typing import Mapping, Sequence
+from config import default_device
+from safetensors.torch import load_model
+from dit import DiT_models
+from vae import VAE_models
+import os
 
 
 def sigmoid_beta_schedule(timesteps, start=-3, end=3, tau=1, clamp_min=1e-5):
@@ -119,3 +124,28 @@ def load_actions(path, action_offset=None):
     # add batch dimension
     actions = rearrange(actions, "t d -> 1 t d")
     return actions
+
+
+def load_models(dit_ckpt, vae_ckpt):
+    model = DiT_models["DiT-S/2"]()
+    if dit_ckpt is not None:
+        print(f"loading Oasis-500M from oasis-ckpt={os.path.abspath(dit_ckpt)}...")
+        if dit_ckpt.endswith(".pt"):
+            ckpt = torch.load(dit_ckpt, weights_only=True)
+            model.load_state_dict(ckpt, strict=False)
+        elif dit_ckpt.endswith(".safetensors"):
+            load_model(model, dit_ckpt)
+    model = model.to(default_device)
+
+    # load VAE checkpoint
+    vae = VAE_models["vit-l-20-shallow-encoder"]()
+    if vae_ckpt is not None:
+        print(f"loading ViT-VAE-L/20 from vae-ckpt={os.path.abspath(vae_ckpt)}...")
+        if vae_ckpt.endswith(".pt"):
+            vae_ckpt = torch.load(vae_ckpt, weights_only=True)
+            vae.load_state_dict(vae_ckpt)
+        elif vae_ckpt.endswith(".safetensors"):
+            load_model(vae, vae_ckpt)
+    vae = vae.to(default_device)
+
+    return model, vae

@@ -7,11 +7,10 @@ import torch
 from dit import DiT_models
 from vae import VAE_models
 from torchvision.io import read_video, write_video
-from utils import load_prompt, load_actions, sigmoid_beta_schedule
+from utils import load_models, load_prompt, load_actions, sigmoid_beta_schedule
 from tqdm import tqdm
 from einops import rearrange
 from torch import autocast
-from safetensors.torch import load_model
 import argparse
 from pprint import pprint
 from config import default_device
@@ -22,25 +21,9 @@ def main(args):
     torch.cuda.manual_seed(0)
     torch.mps.manual_seed(0)
 
-    # load DiT checkpoint
-    model = DiT_models["DiT-S/2"]()
-    print(f"loading Oasis-500M from oasis-ckpt={os.path.abspath(args.oasis_ckpt)}...")
-    if args.oasis_ckpt.endswith(".pt"):
-        ckpt = torch.load(args.oasis_ckpt, weights_only=True)
-        model.load_state_dict(ckpt, strict=False)
-    elif args.oasis_ckpt.endswith(".safetensors"):
-        load_model(model, args.oasis_ckpt)
-    model = model.to(default_device).eval()
-
-    # load VAE checkpoint
-    vae = VAE_models["vit-l-20-shallow-encoder"]()
-    print(f"loading ViT-VAE-L/20 from vae-ckpt={os.path.abspath(args.vae_ckpt)}...")
-    if args.vae_ckpt.endswith(".pt"):
-        vae_ckpt = torch.load(args.vae_ckpt, weights_only=True)
-        vae.load_state_dict(vae_ckpt)
-    elif args.vae_ckpt.endswith(".safetensors"):
-        load_model(vae, args.vae_ckpt)
-    vae = vae.to(default_device).eval()
+    model, vae = load_models(args.oasis_ckpt, args.vae_ckpt)
+    model = model.eval()
+    vae = vae.eval()
 
     # sampling params
     n_prompt_frames = args.n_prompt_frames
