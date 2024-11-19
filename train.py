@@ -21,12 +21,12 @@ def train_vae(args):
     # TODO: good LR / optimizer
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
-    dataset = OasisDataset()
+    dataset = OasisDataset(max_seq_len=1)
     train_loader = dataloader.DataLoader(dataset, batch_size=args.batch, shuffle=True)
     for epoch in range(args.epochs):
         train_loss = 0
         for X in tqdm(train_loader):
-            X = X.to(default_device)
+            X = X.squeeze(1).to(default_device)
             optimizer.zero_grad()
             x_prime, dist, latent = model(X, None)
 
@@ -46,8 +46,13 @@ def train_dit(args):
     model, vae = load_models(None, None)
     model = model.train()
 
-    # get alphas
+    # params
     max_timesteps = 1000
+    n_prompt_frames = 10
+
+    # model.max_frames
+
+    # get alphas
     betas = sigmoid_beta_schedule(max_timesteps).float().to(default_device)
     alphas = 1.0 - betas
     alphas_cumprod = torch.cumprod(alphas, dim=0)
@@ -61,23 +66,28 @@ def train_dit(args):
     # TODO: good LR / optimizer
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
-    # TODO
-    """
-    dataset = OasisDataset()
+    dataset = OasisDataset(max_seq_len=n_prompt_frames)
     train_loader = dataloader.DataLoader(dataset, batch_size=args.batch, shuffle=True)
     for epoch in range(args.epochs):
         train_losses = []
         for X in tqdm(train_loader):
             optimizer.zero_grad()
-            batch_size = X.shape[0]
             X = X.to(default_device)
-            #X = vae.encode(X * 2 - 1)
+            X = X * 2 - 1 # Put pixels in range [-1, 1]
 
-            # TODO
-            num_tokens = 1
+            B = X.shape[0]
+            H, W = X.shape[-2:]
+            scaling_factor = 0.07843137255 # TODO: ?
+            X = rearrange(X, "b t c h w -> (b t) c h w")
+            with torch.no_grad():
+                with autocast(default_device, dtype=torch.half):
+                    X = vae.encode(X).sample() * scaling_factor
+            X = rearrange(X, "(b t) (h w) c -> b t c h w", t=n_prompt_frames, h=H // vae.patch_size, w=W // vae.patch_size)
 
             # Sample a batch of times for training
-            t = torch.randint(0, max_timesteps, (batch_size, num_tokens), device=default_device).long()
+            t_ctx = torch.full((B, n_prompt_frames - 1), 0, dtype=torch.long, device=default_device)
+            t = torch.randint(0, max_timesteps, (B, 1), dtype=torch.long, device=default_device)
+            t = torch.cat([t_ctx, t], dim=1)
 
             # Calculate the loss
             e = torch.randn_like(X)
@@ -91,7 +101,6 @@ def train_dit(args):
             optimizer.step()
 
         print("Epoch: {} Loss: {}".format(epoch, np.mean(train_losses)))
-    """
 
 
 def main(args):
@@ -104,6 +113,19 @@ def main(args):
 
 
 if __name__ == "__main__":
+    from dataset2 import DataLoader
+
+    n_workers = n_batchsize = 1
+    n_epochs = 1
+    loader = DataLoader("data", n_workers, n_batchsize, n_epochs)
+
+    for t in loader:
+        #print(t)
+        pass
+    del loader
+
+    raise ValueError
+
     parse = argparse.ArgumentParser()
 
     parse.add_argument(
