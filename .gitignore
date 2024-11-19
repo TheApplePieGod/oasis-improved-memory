@@ -2,3 +2,5 @@
 **/*.safetensors
 **/__pycache__
 **/*.mp4
+data/**
+logs/**
