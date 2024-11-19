@@ -10,8 +10,29 @@ import argparse
 from pprint import pprint
 from config import default_device
 from dataset import OasisDataset
-import torch.utils.data.dataloader as dataloader
+from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
+import time
 import os
+
+
+def get_dataloader(data_dir, max_seq_len, batch):
+    dataset = OasisDataset(data_dir, max_seq_len=max_seq_len)
+    return DataLoader(
+        dataset,
+        batch_size=batch,
+        shuffle=True,
+        num_workers=4,
+        pin_memory=False,
+        prefetch_factor=1,
+        persistent_workers=True
+    )
+
+
+def save_state_dict(state_dict, dir, filename):
+    if not os.path.exists(dir):
+        os.makedirs(dir)
+    torch.save(state_dict, os.path.join(dir, filename))
 
 
 def train_vae(args):
@@ -21,11 +42,15 @@ def train_vae(args):
     # TODO: good LR / optimizer
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
-    dataset = OasisDataset(max_seq_len=1)
-    train_loader = dataloader.DataLoader(dataset, batch_size=args.batch, shuffle=True)
+    writer = SummaryWriter("logs/vae/summary")
+    train_loader = get_dataloader(args.data_dir, 1, args.batch)
     for epoch in range(args.epochs):
         train_loss = 0
+        prev_time = time.time()
         for X in tqdm(train_loader):
+            next_time = time.time()
+            #tqdm.write(f"One batch: {(next_time - prev_time)*1000:.2f} ms")
+
             X = X.squeeze(1).to(default_device)
             optimizer.zero_grad()
             x_prime, dist, latent = model(X, None)
@@ -38,8 +63,25 @@ def train_vae(args):
             train_loss += loss.item()
             optimizer.step()
 
-        print('Epoch: {} Train Loss: {:.4f}'.format(
-              epoch, train_loss / len(train_loader.dataset)))
+            prev_time = time.time()
+
+        train_loss = train_loss / len(train_loader.dataset)
+        writer.add_scalar("Train Loss", train_loss, epoch)
+        writer.flush()
+        print(f'Epoch: {epoch} Train Loss: {train_loss:.4f}')
+
+        if epoch % args.ckpt_every == 0 or epoch == args.epochs - 1:
+            save_state_dict(
+                {
+                    "epoch": epoch,
+                    "vae_state_dict": model.state_dict(),
+                    "train_loss": train_loss,
+                },
+                "logs/vae/ckpt",
+                f"model_{epoch}.pt"
+            )
+
+    writer.close()
 
 
 def train_dit(args):
@@ -66,14 +108,12 @@ def train_dit(args):
     # TODO: good LR / optimizer
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
-    dataset = OasisDataset(max_seq_len=n_prompt_frames)
-    train_loader = dataloader.DataLoader(dataset, batch_size=args.batch, shuffle=True)
+    train_loader = get_dataloader(args.data_dir, n_prompt_frames, args.batch)
     for epoch in range(args.epochs):
         train_losses = []
         for X in tqdm(train_loader):
             optimizer.zero_grad()
             X = X.to(default_device)
-            X = X * 2 - 1 # Put pixels in range [-1, 1]
 
             B = X.shape[0]
             H, W = X.shape[-2:]
@@ -113,19 +153,6 @@ def main(args):
 
 
 if __name__ == "__main__":
-    from dataset2 import DataLoader
-
-    n_workers = n_batchsize = 1
-    n_epochs = 1
-    loader = DataLoader("data", n_workers, n_batchsize, n_epochs)
-
-    for t in loader:
-        #print(t)
-        pass
-    del loader
-
-    raise ValueError
-
     parse = argparse.ArgumentParser()
 
     parse.add_argument(
@@ -139,6 +166,18 @@ if __name__ == "__main__":
         type=int,
         help="Train batch size",
         default=4,
+    )
+    parse.add_argument(
+        "--ckpt-every",
+        type=int,
+        help="Number of epochs for every checkpoint save",
+        default=5,
+    )
+    parse.add_argument(
+        "--data-dir",
+        type=str,
+        help="Dataset directory",
+        default="data",
     )
     parse.add_argument(
         "--train-vae",

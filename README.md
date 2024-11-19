@@ -17,11 +17,14 @@ conda activate oasis-mem
 
 # Macos
 pip install torch torchvision
+# ------
 
 # Windows
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+# ------
 
-pip install einops diffusers timm av opencv-python
+# Install other deps
+pip install einops diffusers timm av tensorboard
 ```
 
 ## Download the model weights
