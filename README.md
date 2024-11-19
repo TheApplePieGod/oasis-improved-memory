@@ -21,7 +21,7 @@ pip install torch torchvision
 # Windows
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
 
-pip install einops diffusers timm av
+pip install einops diffusers timm av opencv-python
 ```
 
 ## Download the model weights
