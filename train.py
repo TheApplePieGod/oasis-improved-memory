@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from torchvision.io import read_video, write_video
-from utils import load_models, load_prompt, load_actions, sigmoid_beta_schedule
+from utils import load_models, load_prompt, load_actions, sigmoid_beta_schedule, get_dataloader, save_state_dict
 from tqdm import tqdm
 from einops import rearrange
 from torch import autocast
@@ -9,30 +9,9 @@ from torch import optim
 import argparse
 from pprint import pprint
 from config import default_device
-from dataset import OasisDataset
-from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 import time
 import os
-
-
-def get_dataloader(data_dir, max_seq_len, batch):
-    dataset = OasisDataset(data_dir, max_seq_len=max_seq_len)
-    return DataLoader(
-        dataset,
-        batch_size=batch,
-        shuffle=True,
-        num_workers=4,
-        pin_memory=False,
-        prefetch_factor=1,
-        persistent_workers=True
-    )
-
-
-def save_state_dict(state_dict, dir, filename):
-    if not os.path.exists(dir):
-        os.makedirs(dir)
-    torch.save(state_dict, os.path.join(dir, filename))
 
 
 def train_vae(args):

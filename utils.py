@@ -14,6 +14,8 @@ from config import default_device
 from safetensors.torch import load_model
 from dit import DiT_models
 from vae import VAE_models
+from dataset import OasisDataset
+from torch.utils.data import DataLoader
 import os
 
 
@@ -149,3 +151,22 @@ def load_models(dit_ckpt, vae_ckpt):
     vae = vae.to(default_device)
 
     return model, vae
+
+
+def get_dataloader(data_dir, max_seq_len, batch):
+    dataset = OasisDataset(data_dir, max_seq_len=max_seq_len)
+    return DataLoader(
+        dataset,
+        batch_size=batch,
+        shuffle=True,
+        num_workers=4,
+        pin_memory=False,
+        prefetch_factor=1,
+        persistent_workers=True
+    )
+
+
+def save_state_dict(state_dict, dir, filename):
+    if not os.path.exists(dir):
+        os.makedirs(dir)
+    torch.save(state_dict, os.path.join(dir, filename))
