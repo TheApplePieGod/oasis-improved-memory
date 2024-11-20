@@ -9,10 +9,17 @@ import av
 import os
 
 class OasisDataset(Dataset):
-    def __init__(self, data_dir, max_seq_len):
+    def __init__(
+        self,
+        data_dir,
+        image_size,
+        max_seq_len,
+        max_datapoints=None
+    ):
         assert max_seq_len > 0
 
         self.data_dir = data_dir
+        self.image_size = image_size
         self.max_seq_len = max_seq_len
 
         self.datapoints = []
@@ -39,6 +46,10 @@ class OasisDataset(Dataset):
                 "frame_count": int(frame_count)
             })
 
+        if max_datapoints is not None:
+            assert max_datapoints > 0
+            self.datapoints = self.datapoints[:max_datapoints]
+
         print(f"Dataset initialized with {len(self.datapoints)} datapoints")
 
     def __getitem__(self, idx):
@@ -62,8 +73,11 @@ class OasisDataset(Dataset):
             video.seek(seek_ts, stream=stream)
 
             for frame in video.decode(video=0):
-                # TODO: don't hardcode resize
-                frame = frame.to_ndarray(width=640, height=360, format="rgb24")
+                frame = frame.to_ndarray(
+                    width=self.image_size[0],
+                    height=self.image_size[1],
+                    format="rgb24"
+                )
                 frames.append([frame])
 
                 if len(frames) >= seq_len:

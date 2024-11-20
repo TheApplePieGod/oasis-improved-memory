@@ -14,28 +14,35 @@ import numpy as np
 import os
 
 
-def plot_latents(model, i=0, j=1):
+def plot_latents(model):
     image_width = model.input_width
     image_height = model.input_height
     latent_w = image_width // model.patch_size
     latent_h = image_height // model.patch_size
-    grid_size = 10
 
-    loader = get_dataloader("data", 1, 1)
-    x_in = loader.dataset[0].to(default_device)
-    with torch.no_grad():
-        z = model.encode(x_in).mean
-        #z = torch.rand((1, latent_h * latent_w, model.latent_dim)).to(default_device)
-        x_out = model.decode(z)
+    loader = get_dataloader(
+        1,
+        data_dir="data",
+        image_size=(image_width, image_height),
+        max_seq_len=1,
+    )
 
-    x_in = (rearrange(x_in, "1 c h w -> h w c") + 1) / 2
-    x_out = (rearrange(x_out, "1 c h w -> h w c") + 1) / 2
+    num_images = 1
+    fig = plt.figure()
+    for i in range(num_images):
+        x_in = loader.dataset[i].to(default_device)
+        with torch.no_grad():
+            z = model.encode(x_in).mean
+            #z = torch.rand((1, latent_h * latent_w, model.latent_dim)).to(default_device)
+            x_out = model.decode(z)
 
-    fig = plt.figure(figsize=(15, 15))
-    fig.add_subplot(2, 1, 1)
-    plt.imshow(x_in.cpu())
-    fig.add_subplot(2, 1, 2)
-    plt.imshow(x_out.cpu())
+        x_in = (rearrange(x_in, "1 c h w -> h w c") + 1) / 2
+        x_out = (rearrange(x_out, "1 c h w -> h w c") + 1) / 2
+
+        fig.add_subplot(num_images, 2, i * 2 + 1)
+        plt.imshow(x_in.cpu())
+        fig.add_subplot(num_images, 2, i * 2 + 2)
+        plt.imshow(x_out.cpu())
     plt.show()
 
 
@@ -44,14 +51,15 @@ def main(args):
     torch.cuda.manual_seed(0)
     torch.mps.manual_seed(0)
 
-    model, vae = load_models(None, None)
-    vae_ckpt = torch.load(f"logs/vae/ckpt/{args.vae_ckpt}")
-    vae.load_state_dict(vae_ckpt["vae_state_dict"])
+    # Test
+    _, vae = load_models(None, f"logs/vae/ckpt/{args.vae_ckpt}", (0, 0))
 
-    model = model.eval()
+    # Baseline
+    #_, vae = load_models(None, f"./vit-l-20.safetensors", (0, 0))
+
     vae = vae.eval()
 
-    plot_latents(vae, 0, 0)
+    plot_latents(vae)
 
 
 if __name__ == "__main__":

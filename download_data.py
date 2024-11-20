@@ -3,6 +3,7 @@ from pprint import pprint
 from tqdm import tqdm
 import requests
 import argparse
+import glob
 import json
 import os
 
@@ -56,6 +57,16 @@ def main(args):
 
     with ThreadPoolExecutor(max_workers=args.num_workers) as executor:
         results = list(tqdm(executor.map(download, paths), total=len(paths)))
+
+    # Validate
+    unique_ids = glob.glob(os.path.join(args.out_dir, "*.mp4"))
+    unique_ids = list(set([os.path.basename(x).split(".")[0] for x in unique_ids]))
+    for id in unique_ids:
+        video_path = os.path.abspath(os.path.join(args.out_dir, id + ".mp4"))
+        json_path = os.path.abspath(os.path.join(args.out_dir, id + ".jsonl"))
+        if not os.path.exists(json_path):
+            print(f"ID {id} missing .jsonl, removing")
+            os.remove(video_path)
 
 
 if __name__ == "__main__":

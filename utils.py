@@ -128,7 +128,7 @@ def load_actions(path, action_offset=None):
     return actions
 
 
-def load_models(dit_ckpt, vae_ckpt):
+def load_models(dit_ckpt, vae_ckpt, default_img_size):
     model = DiT_models["DiT-S/2"]()
     if dit_ckpt is not None:
         print(f"loading Oasis-500M from oasis-ckpt={os.path.abspath(dit_ckpt)}...")
@@ -137,24 +137,44 @@ def load_models(dit_ckpt, vae_ckpt):
             model.load_state_dict(ckpt, strict=False)
         elif dit_ckpt.endswith(".safetensors"):
             load_model(model, dit_ckpt)
+
     model = model.to(default_device)
 
+    # ------------
+
+    def load_vae(img_size):
+        return VAE_models["vit-l-20-shallow-encoder"](
+            input_width=img_size[0],
+            input_height=img_size[1]
+        )
+
     # load VAE checkpoint
-    vae = VAE_models["vit-l-20-shallow-encoder"]()
+    vae = None
     if vae_ckpt is not None:
         print(f"loading ViT-VAE-L/20 from vae-ckpt={os.path.abspath(vae_ckpt)}...")
         if vae_ckpt.endswith(".pt"):
-            vae_ckpt = torch.load(vae_ckpt, weights_only=True)
-            vae.load_state_dict(vae_ckpt)
+            # Load size info from the checkpoint
+            vae_ckpt = torch.load(vae_ckpt)
+            vae = load_vae((vae_ckpt["input_width"], vae_ckpt["input_height"]))
+            vae.load_state_dict(vae_ckpt["vae_state_dict"])
         elif vae_ckpt.endswith(".safetensors"):
+            # Size for oasis pretrained weights
+            vae = load_vae((640, 320))
             load_model(vae, vae_ckpt)
+
+    if vae is None:
+        # Populate size with defaults specified
+        vae = load_vae(default_img_size)
+
     vae = vae.to(default_device)
+
+    print(f"VAE has input dim {vae.input_width}x{vae.input_height}")
 
     return model, vae
 
 
-def get_dataloader(data_dir, max_seq_len, batch):
-    dataset = OasisDataset(data_dir, max_seq_len=max_seq_len)
+def get_dataloader(batch, **kwargs):
+    dataset = OasisDataset(**kwargs)
     return DataLoader(
         dataset,
         batch_size=batch,
@@ -170,3 +190,8 @@ def save_state_dict(state_dict, dir, filename):
     if not os.path.exists(dir):
         os.makedirs(dir)
     torch.save(state_dict, os.path.join(dir, filename))
+
+
+def parse_img_size(size_str):
+    split = size_str.strip().split("x")
+    return int(split[0]), int(split[1])
