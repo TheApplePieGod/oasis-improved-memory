@@ -106,8 +106,9 @@ def train_vae(args):
 
 
 def train_dit(args):
-    model, vae = load_models(None, None, (0, 0))
+    model, vae = load_models(None, args.vae_ckpt, (0, 0))
     model = model.train()
+    model.requires_grad_(True)
 
     # params
     max_timesteps = 1000
@@ -121,21 +122,22 @@ def train_dit(args):
 
     def forward_sample(x_0, t, e):
         alphabar_t = alphas_cumprod[t.cpu()]
-        print(alphabar_t.shape)
         return torch.sqrt(alphabar_t) * x_0 + torch.sqrt(1 - alphabar_t) * e
 
     # TODO: good LR / optimizer
-    optimizer = optim.Adam(model.parameters(), lr=1e-3)
+    optimizer = optim.AdamW(model.parameters(), lr=1e-4)
 
     train_loader = get_dataloader(
         args.batch,
         data_dir=args.data_dir,
         image_size=(vae.input_width, vae.input_height),
-        max_seq_len=n_prompt_frames
+        max_seq_len=n_prompt_frames,
+        max_datapoints=1
     )
 
+    writer = SummaryWriter("logs/dit/summary")
     for epoch in range(args.epochs):
-        train_losses = []
+        avg_train_loss = 0
         for X in tqdm(train_loader):
             optimizer.zero_grad()
             X = X.to(default_device)
@@ -160,12 +162,29 @@ def train_dit(args):
             e_pred = model(x_t, t)
             loss = torch.nn.functional.mse_loss(e, e_pred)
 
-            # Gradient step
-            train_losses.append(loss.item())
             loss.backward()
+
+            avg_train_loss += loss.item()
+
             optimizer.step()
 
-        print("Epoch: {} Loss: {}".format(epoch, np.mean(train_losses)))
+        avg_train_loss = avg_train_loss / len(train_loader.dataset)
+
+        writer.add_scalar("Train Loss", avg_train_loss, epoch)
+
+        writer.flush()
+
+        print(f'Epoch: {epoch} Train Loss: {avg_train_loss:.4f}')
+
+        if epoch % args.ckpt_every == 0 or epoch == args.epochs - 1:
+            save_state_dict(
+                {
+                    "epoch": epoch,
+                    "dit_state_dict": model.state_dict()
+                },
+                "logs/dit/ckpt",
+                f"model_{epoch}.pt"
+            )
 
 
 def main(args):
@@ -239,6 +258,12 @@ if __name__ == "__main__":
         type=bool,
         help="Should train the diffusion transformer",
         default=False,
+    )
+    parse.add_argument(
+        "--vae-ckpt",
+        type=str,
+        help="Path to VAE ckpt for DiT training",
+        default="logs/vae/ckpt/model_4999.pt"
     )
 
     args = parse.parse_args()

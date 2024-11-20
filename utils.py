@@ -92,7 +92,7 @@ IMAGE_EXTENSIONS = {"png", "jpg", "jpeg"}
 VIDEO_EXTENSIONS = {"mp4"}
 
 
-def load_prompt(path, video_offset=None, n_prompt_frames=1):
+def load_prompt(path, video_offset=None, n_prompt_frames=1, size=(360, 640)):
     if path.lower().split(".")[-1] in IMAGE_EXTENSIONS:
         print("prompt is image; ignoring video_offset and n_prompt_frames")
         prompt = read_image(path)
@@ -103,10 +103,11 @@ def load_prompt(path, video_offset=None, n_prompt_frames=1):
         if video_offset is not None:
             prompt = prompt[video_offset:]
         prompt = prompt[:n_prompt_frames]
+        prompt = rearrange(prompt, "t h w c -> t c h w")
     else:
         raise ValueError(f"unrecognized prompt file extension; expected one in {IMAGE_EXTENSIONS} or {VIDEO_EXTENSIONS}")
     assert prompt.shape[0] == n_prompt_frames, f"input prompt {path} had less than n_prompt_frames={n_prompt_frames} frames"
-    prompt = resize(prompt, (360, 640))
+    prompt = resize(prompt, (size[1], size[0]))
     # add batch dimension
     prompt = rearrange(prompt, "t c h w -> 1 t c h w")
     prompt = prompt.float() / 255.0
@@ -129,19 +130,6 @@ def load_actions(path, action_offset=None):
 
 
 def load_models(dit_ckpt, vae_ckpt, default_img_size):
-    model = DiT_models["DiT-S/2"]()
-    if dit_ckpt is not None:
-        print(f"loading Oasis-500M from oasis-ckpt={os.path.abspath(dit_ckpt)}...")
-        if dit_ckpt.endswith(".pt"):
-            ckpt = torch.load(dit_ckpt, weights_only=True)
-            model.load_state_dict(ckpt, strict=False)
-        elif dit_ckpt.endswith(".safetensors"):
-            load_model(model, dit_ckpt)
-
-    model = model.to(default_device)
-
-    # ------------
-
     def load_vae(img_size):
         return VAE_models["vit-l-20-shallow-encoder"](
             input_width=img_size[0],
@@ -169,6 +157,22 @@ def load_models(dit_ckpt, vae_ckpt, default_img_size):
     vae = vae.to(default_device)
 
     print(f"VAE has input dim {vae.input_width}x{vae.input_height}")
+
+    # ------------
+
+    model = DiT_models["DiT-S/2"](
+        input_w=vae.seq_w,
+        input_h=vae.seq_h
+    )
+    if dit_ckpt is not None:
+        print(f"loading Oasis-500M from oasis-ckpt={os.path.abspath(dit_ckpt)}...")
+        if dit_ckpt.endswith(".pt"):
+            ckpt = torch.load(dit_ckpt, weights_only=True)
+            model.load_state_dict(ckpt, strict=False)
+        elif dit_ckpt.endswith(".safetensors"):
+            load_model(model, dit_ckpt)
+
+    model = model.to(default_device)
 
     return model, vae
 

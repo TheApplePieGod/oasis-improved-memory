@@ -7,7 +7,7 @@ import torch
 from dit import DiT_models
 from vae import VAE_models
 from torchvision.io import read_video, write_video
-from utils import load_models, load_prompt, load_actions, sigmoid_beta_schedule
+from utils import load_models, load_prompt, load_actions, sigmoid_beta_schedule, get_dataloader
 from tqdm import tqdm
 from einops import rearrange
 from torch import autocast
@@ -21,7 +21,7 @@ def main(args):
     torch.cuda.manual_seed(0)
     torch.mps.manual_seed(0)
 
-    model, vae = load_models(args.oasis_ckpt, args.vae_ckpt)
+    model, vae = load_models(args.oasis_ckpt, args.vae_ckpt, (0, 0))
     model = model.eval()
     vae = vae.eval()
 
@@ -39,9 +39,21 @@ def main(args):
         args.prompt_path,
         video_offset=args.video_offset,
         n_prompt_frames=n_prompt_frames,
+        size=(vae.input_width, vae.input_height)
     )
     # get input action stream
     actions = load_actions(args.actions_path, action_offset=args.video_offset)[:, :total_frames]
+
+    """
+    loader = get_dataloader(
+        1,
+        data_dir="data",
+        image_size=(vae.input_width, vae.input_height),
+        max_seq_len=32,
+        max_datapoints=1
+    )
+    x = loader.dataset[0].to(default_device).unsqueeze(0)
+    """
 
     # sampling inputs
     x = x.to(default_device)
@@ -103,7 +115,7 @@ def main(args):
             x[:, -1:] = x_pred[:, -1:]
 
     # vae decoding
-    x = rearrange(x, "b t c h w -> (b t) (h w) c")
+    x = rearrange(x, "b t c h w -> (b t) (h w) c").float()
     with torch.no_grad():
         x = (vae.decode(x / scaling_factor) + 1) / 2
     x = rearrange(x, "(b t) c h w -> b t h w c", t=total_frames)
