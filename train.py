@@ -34,9 +34,9 @@ def train_vae(args):
             optimizer.zero_grad()
             x_prime, dist, latent = model(X, None)
 
-            l1 = torch.nn.functional.mse_loss(x_prime, X, reduction='sum')
-            dkl = 0.5 * torch.sum(dist.mean ** 2 + dist.var - dist.logvar - 1)
-            loss = l1 + dkl
+            l1 = torch.nn.functional.mse_loss(x_prime, X, reduction='sum') / X.shape[0]
+            dkl = (0.5 * torch.sum(dist.mean ** 2 + dist.var - dist.logvar - 1)) / X.shape[0]
+            loss = l1 + args.kl_scale * dkl
 
             loss.backward()
             train_loss += loss.item()
@@ -69,9 +69,7 @@ def train_dit(args):
 
     # params
     max_timesteps = 1000
-    n_prompt_frames = 10
-
-    # model.max_frames
+    n_prompt_frames = model.max_frames
 
     # get alphas
     betas = sigmoid_beta_schedule(max_timesteps).float().to(default_device)
@@ -151,6 +149,12 @@ if __name__ == "__main__":
         type=int,
         help="Number of epochs for every checkpoint save",
         default=5,
+    )
+    parse.add_argument(
+        "--kl-scale",
+        type=float,
+        help="Scale for the KL-divergence term of the VAE",
+        default=1e-6,
     )
     parse.add_argument(
         "--data-dir",
