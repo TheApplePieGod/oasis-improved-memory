@@ -12,9 +12,12 @@ import os
 
 
 def oasis_dataset_collate(batch):
+    # Ensure that the batch has the same sequence lengths if some
+    # were cut short
+    min_seq = min(x[0].shape[0] for x in batch)
     return (
-        torch.stack([x[0] for x in batch]),
-        torch.stack([x[1] for x in batch]),
+        torch.stack([x[0][:min_seq] for x in batch]),
+        torch.stack([x[1][:min_seq] for x in batch]),
     )
 
 
