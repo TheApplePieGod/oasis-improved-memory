@@ -48,7 +48,7 @@ def train_vae(args):
         avg_lpip_loss = 0
         train_steps = 0
         prev_time = time.time()
-        for X in tqdm(train_loader):
+        for X, _ in tqdm(train_loader):
             next_time = time.time()
             #tqdm.write(f"One batch: {(next_time - prev_time)*1000:.2f} ms")
 
@@ -144,9 +144,10 @@ def train_dit(args):
     for epoch in range(args.epochs):
         avg_train_loss = 0
         train_steps = 0
-        for X in tqdm(train_loader):
+        for X, A in tqdm(train_loader):
             optimizer.zero_grad()
             X = X.to(default_device)
+            A = A.to(default_device)
 
             B = X.shape[0]
             H, W = X.shape[-2:]
@@ -166,7 +167,7 @@ def train_dit(args):
             # Calculate the loss
             e = torch.randn_like(X)
             x_t = forward_sample(X, t, e)
-            e_pred = model(x_t, t)
+            e_pred = model(x_t, t, A)
             loss = torch.nn.functional.mse_loss(e, e_pred, reduction="none")
 
             snr = snr_arr[t]

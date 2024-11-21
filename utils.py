@@ -35,59 +35,6 @@ def sigmoid_beta_schedule(timesteps, start=-3, end=3, tau=1, clamp_min=1e-5):
     return torch.clip(betas, 0, 0.999)
 
 
-ACTION_KEYS = [
-    "inventory",
-    "ESC",
-    "hotbar.1",
-    "hotbar.2",
-    "hotbar.3",
-    "hotbar.4",
-    "hotbar.5",
-    "hotbar.6",
-    "hotbar.7",
-    "hotbar.8",
-    "hotbar.9",
-    "forward",
-    "back",
-    "left",
-    "right",
-    "cameraX",
-    "cameraY",
-    "jump",
-    "sneak",
-    "sprint",
-    "swapHands",
-    "attack",
-    "use",
-    "pickItem",
-    "drop",
-]
-
-
-def one_hot_actions(actions: Sequence[Mapping[str, int]]) -> torch.Tensor:
-    actions_one_hot = torch.zeros(len(actions), len(ACTION_KEYS))
-    for i, current_actions in enumerate(actions):
-        for j, action_key in enumerate(ACTION_KEYS):
-            if action_key.startswith("camera"):
-                if action_key == "cameraX":
-                    value = current_actions["camera"][0]
-                elif action_key == "cameraY":
-                    value = current_actions["camera"][1]
-                else:
-                    raise ValueError(f"Unknown camera action key: {action_key}")
-                max_val = 20
-                bin_size = 0.5
-                num_buckets = int(max_val / bin_size)
-                value = (value - num_buckets) / num_buckets
-                assert -1 - 1e-3 <= value <= 1 + 1e-3, f"Camera action value must be in [-1, 1], got {value}"
-            else:
-                value = current_actions[action_key]
-                assert 0 <= value <= 1, f"Action value must be in [0, 1] got {value}"
-            actions_one_hot[i, j] = value
-
-    return actions_one_hot
-
-
 IMAGE_EXTENSIONS = {"png", "jpg", "jpeg"}
 VIDEO_EXTENSIONS = {"mp4"}
 

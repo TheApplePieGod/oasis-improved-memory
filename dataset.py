@@ -1,5 +1,6 @@
 from torch.utils.data import Dataset
 from einops import rearrange
+from actions import process_json_action, one_hot_actions
 import numpy as np
 import random
 import torch
@@ -61,34 +62,57 @@ class OasisDataset(Dataset):
         seq_len = self.max_seq_len
         start_frame = random.randint(1, data["frame_count"] - seq_len) - 1
 
-        frames = []
-        with av.open(data["video_path"]) as video:
-            stream = video.streams.video[0]
+        with open(data["json_path"]) as json_file:
+            json_lines = json_file.readlines()
+            json_data = "[" + ",".join(json_lines) + "]"
+            json_data = json.loads(json_data)
 
+        frames = []
+        actions = []
+        with av.open(data["video_path"]) as video:
+            """
             # Rough estimate of the desired frame. Could do some more math
             # and decoding to get the exact frame, but it's not that important
             # https://github.com/PyAV-Org/PyAV/discussions/1113
+            stream = video.streams.video[0]
             seek_sec = start_frame / stream.average_rate
             seek_ts = int(seek_sec / stream.time_base)
             video.seek(seek_ts, stream=stream)
+            """
 
-            for frame in video.decode(video=0):
+            frame_iter = video.decode(video=0)
+            for i in range(len(json_data)):
+                # TODO: optimize?
+                if i < start_frame:
+                    next(frame_iter)
+                    continue
+
+                frame = next(frame_iter)
+                action = json_data[i]
+                action, is_null = process_json_action(action)
+
+                # If nothing happened, skip to the next frame
+                if is_null:
+                    continue
+
                 frame = frame.to_ndarray(
                     width=self.image_size[0],
                     height=self.image_size[1],
                     format="rgb24"
                 )
                 frames.append([frame])
+                actions.append(action)
 
                 if len(frames) >= seq_len:
                     break
 
+        actions = one_hot_actions(actions)
         frames = np.vstack(frames)
         frames = torch.from_numpy(frames)
         frames = rearrange(frames, "t h w c -> t c h w")
         frames = frames.float() / 255.0  # Normalize to [0, 1]
         frames = frames * 2.0 - 1.0  # Normalize to [-1, 1]
-        return frames
+        return frames, actions
 
     def __len__(self):
         return len(self.datapoints)
