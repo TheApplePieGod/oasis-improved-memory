@@ -119,6 +119,10 @@ def train_dit(args):
     alphas = 1.0 - betas
     alphas_cumprod = torch.cumprod(alphas, dim=0)
     alphas_cumprod = rearrange(alphas_cumprod, "T -> T 1 1 1")
+    cum_snr_decay = 0.98
+    snr_clip = 5.0
+    snr_arr = alphas_cumprod / (1 - alphas_cumprod)
+    clipped_snr_arr = snr_arr.clamp(max=snr_clip)
 
     def forward_sample(x_0, t, e):
         alphabar_t = alphas_cumprod[t.cpu()]
@@ -152,15 +156,37 @@ def train_dit(args):
             X = rearrange(X, "(b t) (h w) c -> b t c h w", t=n_prompt_frames, h=H // vae.patch_size, w=W // vae.patch_size)
 
             # Sample a batch of times for training
-            t_ctx = torch.full((B, n_prompt_frames - 1), 0, dtype=torch.long, device=default_device)
-            t = torch.randint(0, max_timesteps, (B, 1), dtype=torch.long, device=default_device)
-            t = torch.cat([t_ctx, t], dim=1)
+            #t_ctx = torch.full((B, n_prompt_frames - 1), 0, dtype=torch.long, device=default_device)
+            #t = torch.randint(0, max_timesteps, (B, 1), dtype=torch.long, device=default_device)
+            #t = torch.cat([t_ctx, t], dim=1)
+            t = torch.randint(0, max_timesteps, (B, n_prompt_frames), dtype=torch.long, device=default_device)
 
             # Calculate the loss
             e = torch.randn_like(X)
             x_t = forward_sample(X, t, e)
             e_pred = model(x_t, t)
-            loss = torch.nn.functional.mse_loss(e, e_pred)
+            loss = torch.nn.functional.mse_loss(e, e_pred, reduction="none")
+
+            snr = snr_arr[t]
+            clipped_snr = clipped_snr_arr[t]
+            normalized_clipped_snr = clipped_snr / snr_clip
+            normalized_snr = snr / snr_clip
+
+            cum_snr = torch.zeros_like(normalized_snr)
+            for frame_idx in range(0, t.shape[1]):
+                if frame_idx == 0:
+                    cum_snr[:, frame_idx] = normalized_clipped_snr[:, frame_idx]
+                else:
+                    cum_snr[:, frame_idx] = cum_snr_decay * cum_snr[:, frame_idx - 1] + (1 - cum_snr_decay) * normalized_clipped_snr[:, frame_idx]
+
+            cum_snr = torch.nn.functional.pad(cum_snr[:, :-1], (0, 0, 0, 0, 0, 0, 1, 0), value=0.0)
+            clipped_fused_snr = 1 - (1 - cum_snr * cum_snr_decay) * (1 - normalized_clipped_snr)
+            fused_snr = 1 - (1 - cum_snr * cum_snr_decay) * (1 - normalized_snr)
+            loss_weight = clipped_fused_snr / fused_snr
+            loss_weight = loss_weight.view(*loss_weight.shape, *((1,) * (loss.ndim - 2)))
+
+            #loss = (loss * loss_weight).sum() / B
+            loss = (loss * loss_weight).mean()
 
             loss.backward()
 
