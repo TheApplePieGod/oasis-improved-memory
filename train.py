@@ -149,20 +149,20 @@ def train_dit(args):
             X = X.to(default_device)
             A = A.to(default_device)
 
-            B = X.shape[0]
+            B, T = X.shape[:2]
             H, W = X.shape[-2:]
             scaling_factor = 0.07843137255 # TODO: ?
             X = rearrange(X, "b t c h w -> (b t) c h w")
             with torch.no_grad():
                 with autocast(default_device, dtype=torch.half):
                     X = vae.encode(X).sample() * scaling_factor
-            X = rearrange(X, "(b t) (h w) c -> b t c h w", t=n_prompt_frames, h=vae.seq_h, w=vae.seq_w)
+            X = rearrange(X, "(b t) (h w) c -> b t c h w", t=T, h=vae.seq_h, w=vae.seq_w)
 
             # Sample a batch of times for training
-            #t_ctx = torch.full((B, n_prompt_frames - 1), 0, dtype=torch.long, device=default_device)
+            #t_ctx = torch.full((B, T - 1), 0, dtype=torch.long, device=default_device)
             #t = torch.randint(0, max_timesteps, (B, 1), dtype=torch.long, device=default_device)
             #t = torch.cat([t_ctx, t], dim=1)
-            t = torch.randint(0, max_timesteps, (B, n_prompt_frames), dtype=torch.long, device=default_device)
+            t = torch.randint(0, max_timesteps, (B, T), dtype=torch.long, device=default_device)
 
             # Calculate the loss
             e = torch.randn_like(X)
