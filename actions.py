@@ -143,6 +143,7 @@ def one_hot_actions(actions: Sequence[Mapping[str, int]]) -> torch.Tensor:
                 bin_size = 0.5
                 num_buckets = int(max_val / bin_size)
                 value = (value - num_buckets) / num_buckets
+                value = min(max(value, -1), 1)
                 assert -1 - 1e-3 <= value <= 1 + 1e-3, f"Camera action value must be in [-1, 1], got {value}"
             else:
                 value = current_actions[action_key]

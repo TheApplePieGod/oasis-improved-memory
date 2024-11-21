@@ -150,7 +150,6 @@ def train_dit(args):
             A = A.to(default_device)
 
             B, T = X.shape[:2]
-            H, W = X.shape[-2:]
             scaling_factor = 0.07843137255 # TODO: ?
             X = rearrange(X, "b t c h w -> (b t) c h w")
             with torch.no_grad():
@@ -176,7 +175,7 @@ def train_dit(args):
             normalized_snr = snr / snr_clip
 
             cum_snr = torch.zeros_like(normalized_snr)
-            for frame_idx in range(0, t.shape[1]):
+            for frame_idx in range(0, T):
                 if frame_idx == 0:
                     cum_snr[:, frame_idx] = normalized_clipped_snr[:, frame_idx]
                 else:
