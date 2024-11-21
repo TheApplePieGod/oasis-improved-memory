@@ -167,8 +167,8 @@ def load_models(dit_ckpt, vae_ckpt, default_img_size):
     if dit_ckpt is not None:
         print(f"loading Oasis-500M from oasis-ckpt={os.path.abspath(dit_ckpt)}...")
         if dit_ckpt.endswith(".pt"):
-            ckpt = torch.load(dit_ckpt, weights_only=True)
-            model.load_state_dict(ckpt, strict=False)
+            ckpt = torch.load(dit_ckpt)
+            model.load_state_dict(ckpt["dit_state_dict"], strict=False)
         elif dit_ckpt.endswith(".safetensors"):
             load_model(model, dit_ckpt)
 
