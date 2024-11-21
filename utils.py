@@ -14,7 +14,7 @@ from config import default_device
 from safetensors.torch import load_model
 from dit import DiT_models
 from vae import VAE_models
-from dataset import OasisDataset
+from dataset import OasisDataset, oasis_dataset_collate
 from torch.utils.data import DataLoader
 import os
 
@@ -128,6 +128,7 @@ def get_dataloader(batch, **kwargs):
     dataset = OasisDataset(**kwargs)
     return DataLoader(
         dataset,
+        collate_fn=oasis_dataset_collate,
         batch_size=batch,
         shuffle=True,
         num_workers=4,

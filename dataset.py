@@ -1,3 +1,4 @@
+import torch
 from torch.utils.data import Dataset
 from einops import rearrange
 from actions import process_json_action, one_hot_actions
@@ -8,6 +9,14 @@ import glob
 import json
 import av
 import os
+
+
+def oasis_dataset_collate(batch):
+    return (
+        torch.stack([x[0] for x in batch]),
+        torch.stack([x[1] for x in batch]),
+    )
+
 
 class OasisDataset(Dataset):
     def __init__(
