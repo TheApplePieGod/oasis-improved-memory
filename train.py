@@ -46,6 +46,7 @@ def train_vae(args):
         avg_recon_loss = 0
         avg_kl_loss = 0
         avg_lpip_loss = 0
+        train_steps = 0
         prev_time = time.time()
         for X in tqdm(train_loader):
             next_time = time.time()
@@ -67,6 +68,7 @@ def train_vae(args):
             avg_recon_loss += l1.item()
             avg_kl_loss += dkl.item()
             avg_lpip_loss += lp.item()
+            train_steps += 1
 
             optimizer.step()
 
@@ -74,11 +76,10 @@ def train_vae(args):
 
         lr_scheduler.step()
 
-        # TODO: this avg is not right
-        avg_train_loss = avg_train_loss / len(train_loader.dataset)
-        avg_recon_loss = avg_recon_loss / len(train_loader.dataset)
-        avg_kl_loss = avg_kl_loss / len(train_loader.dataset)
-        avg_lpip_loss = avg_lpip_loss / len(train_loader.dataset)
+        avg_train_loss = avg_train_loss / train_steps
+        avg_recon_loss = avg_recon_loss / train_steps
+        avg_kl_loss = avg_kl_loss / train_steps
+        avg_lpip_loss = avg_lpip_loss / train_steps
 
         writer.add_scalar("Train Loss", avg_train_loss, epoch)
         writer.add_scalar("Recon Loss", avg_recon_loss, epoch)
@@ -106,7 +107,7 @@ def train_vae(args):
 
 
 def train_dit(args):
-    model, vae = load_models(None, args.vae_ckpt, (0, 0))
+    model, vae = load_models(args.dit_ckpt, args.vae_ckpt, (0, 0))
     model = model.train()
     model.requires_grad_(True)
 
@@ -125,7 +126,7 @@ def train_dit(args):
     clipped_snr_arr = snr_arr.clamp(max=snr_clip)
 
     def forward_sample(x_0, t, e):
-        alphabar_t = alphas_cumprod[t.cpu()]
+        alphabar_t = alphas_cumprod[t]
         return torch.sqrt(alphabar_t) * x_0 + torch.sqrt(1 - alphabar_t) * e
 
     # TODO: good LR / optimizer
@@ -136,12 +137,13 @@ def train_dit(args):
         data_dir=args.data_dir,
         image_size=(vae.input_width, vae.input_height),
         max_seq_len=n_prompt_frames,
-        max_datapoints=1
+        #max_datapoints=10
     )
 
     writer = SummaryWriter("logs/dit/summary")
     for epoch in range(args.epochs):
         avg_train_loss = 0
+        train_steps = 0
         for X in tqdm(train_loader):
             optimizer.zero_grad()
             X = X.to(default_device)
@@ -153,7 +155,7 @@ def train_dit(args):
             with torch.no_grad():
                 with autocast(default_device, dtype=torch.half):
                     X = vae.encode(X).sample() * scaling_factor
-            X = rearrange(X, "(b t) (h w) c -> b t c h w", t=n_prompt_frames, h=H // vae.patch_size, w=W // vae.patch_size)
+            X = rearrange(X, "(b t) (h w) c -> b t c h w", t=n_prompt_frames, h=vae.seq_h, w=vae.seq_w)
 
             # Sample a batch of times for training
             #t_ctx = torch.full((B, n_prompt_frames - 1), 0, dtype=torch.long, device=default_device)
@@ -191,10 +193,11 @@ def train_dit(args):
             loss.backward()
 
             avg_train_loss += loss.item()
+            train_steps += 1
 
             optimizer.step()
 
-        avg_train_loss = avg_train_loss / len(train_loader.dataset)
+        avg_train_loss = avg_train_loss / train_steps
 
         writer.add_scalar("Train Loss", avg_train_loss, epoch)
 
@@ -290,6 +293,12 @@ if __name__ == "__main__":
         type=str,
         help="Path to VAE ckpt for DiT training",
         default="logs/vae/ckpt/model_4999.pt"
+    )
+    parse.add_argument(
+        "--dit-ckpt",
+        type=str,
+        help="Path to DiT ckpt for resuming DiT training",
+        default=None
     )
 
     args = parse.parse_args()
