@@ -27,7 +27,7 @@ def plot_latents(model):
         max_seq_len=1,
     )
 
-    num_images = 1
+    num_images = 3
     fig = plt.figure()
     for i in range(num_images):
         x_in = loader.dataset[i].to(default_device)
@@ -46,6 +46,28 @@ def plot_latents(model):
     plt.show()
 
 
+def compute_scaling_factor(model):
+    all_latents = []
+    loader = get_dataloader(
+        1,
+        data_dir="data",
+        image_size=(model.input_width, model.input_height),
+        max_seq_len=50,
+        load_actions=False
+    )
+    with torch.no_grad():
+        for X, _ in tqdm(loader):
+            X = X.to(default_device)
+            X = rearrange(X, "b t c h w -> (b t) c h w")
+            latents = model.encode(X).sample()
+            all_latents.append(latents.cpu())
+
+    all_latents_tensor = torch.cat(all_latents)
+    std = all_latents_tensor.std().item()
+    normalizer = 1 / std
+    print(f'{normalizer=}')
+
+
 def main(args):
     torch.manual_seed(0)
     torch.cuda.manual_seed(0)
@@ -59,7 +81,8 @@ def main(args):
 
     vae = vae.eval()
 
-    plot_latents(vae)
+    #plot_latents(vae)
+    compute_scaling_factor(vae)
 
 
 if __name__ == "__main__":

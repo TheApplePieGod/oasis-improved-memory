@@ -31,43 +31,46 @@ def main(args):
     max_noise_level = 1000
     ddim_noise_steps = args.ddim_steps
     noise_range = torch.linspace(-1, max_noise_level - 1, ddim_noise_steps + 1)
-    noise_abs_max = 20
+    noise_clip = 20
     stabilization_level = 15
 
     # get prompt image/video
+    """
     x = load_prompt(
         args.prompt_path,
         video_offset=args.video_offset,
         n_prompt_frames=n_prompt_frames,
         size=(vae.input_width, vae.input_height)
     )
+    x = x * 2 - 1
     # get input action stream
     actions = load_actions(args.actions_path, action_offset=args.video_offset)[:, :total_frames]
-
     """
+
     loader = get_dataloader(
         1,
         data_dir="data",
         image_size=(vae.input_width, vae.input_height),
-        max_seq_len=32,
-        max_datapoints=1
+        max_seq_len=total_frames,
+        #max_datapoints=1
     )
-    x = loader.dataset[0].to(default_device).unsqueeze(0)
-    """
+    x, actions = loader.dataset[0]
+    x = x.unsqueeze(0)
+    actions = actions.unsqueeze(0)
 
     # sampling inputs
     x = x.to(default_device)
     actions = actions.to(default_device)
 
     # vae encoding
-    B = x.shape[0]
+    B, T = x.shape[:2]
     H, W = x.shape[-2:]
-    scaling_factor = 0.07843137255
+    scaling_factor = 0.96
     x = rearrange(x, "b t c h w -> (b t) c h w")
     with torch.no_grad():
         with autocast(default_device, dtype=torch.half):
-            x = vae.encode(x * 2 - 1).mean * scaling_factor
-    x = rearrange(x, "(b t) (h w) c -> b t c h w", t=n_prompt_frames, h=H // vae.patch_size, w=W // vae.patch_size)
+            x = vae.encode(x).mean * scaling_factor
+    x = rearrange(x, "(b t) (h w) c -> b t c h w", t=T, h=vae.seq_h, w=vae.seq_w)
     x = x[:, :n_prompt_frames]
 
     # get alphas
@@ -79,9 +82,34 @@ def main(args):
     # sampling loop
     for i in tqdm(range(n_prompt_frames, total_frames)):
         chunk = torch.randn((B, 1, *x.shape[-3:]), device=default_device)
-        chunk = torch.clamp(chunk, -noise_abs_max, +noise_abs_max)
+        chunk = torch.clamp(chunk, -noise_clip, +noise_clip)
         x = torch.cat([x, chunk], dim=1)
         start_frame = max(0, i + 1 - model.max_frames)
+
+        """
+        def reverse_sample(x, t):
+            alphabar_t = alphas_cumprod[t]
+            alphabar_tm1 = alphas_cumprod[t - 1]
+            beta = rearrange(betas[t], "b t -> b t 1 1 1")
+            alpha = 1 - beta
+            beta_tilde_t = ((1 - alphabar_tm1) / (1 - alphabar_t)) * beta
+            with torch.no_grad():
+                with autocast(default_device, dtype=torch.half):
+                    eps = model(x, t)
+            mu_tilde_t = torch.sqrt(1.0 / alpha) * (x - beta * eps / torch.sqrt(1.0 - alphabar_t))
+            e = torch.randn_like(x)
+            return mu_tilde_t + torch.sqrt(beta_tilde_t) * e
+
+        t_ctx = torch.full((B, i), 0, dtype=torch.long, device=default_device)
+        for ts in reversed(range(max_noise_level)):
+            t = torch.full((B, 1), ts, dtype=torch.long, device=default_device)
+            t = torch.cat([t_ctx, t], dim=1)
+
+            x_pred = reverse_sample(x, t)
+            #print(x_pred[:, 0].max(), x_pred[:, -1:].max())
+            x[:, -1:] = x_pred[:, -1:]
+
+        """
 
         for noise_idx in reversed(range(1, ddim_noise_steps + 1)):
             # set up noise values

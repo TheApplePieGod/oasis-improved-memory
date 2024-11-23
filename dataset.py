@@ -27,13 +27,15 @@ class OasisDataset(Dataset):
         data_dir,
         image_size,
         max_seq_len,
-        max_datapoints=None
+        max_datapoints=None,
+        load_actions=True
     ):
         assert max_seq_len > 0
 
         self.data_dir = data_dir
         self.image_size = image_size
         self.max_seq_len = max_seq_len
+        self.load_actions = load_actions
 
         self.datapoints = []
         unique_ids = glob.glob(os.path.join(data_dir, "*.mp4"))
@@ -49,8 +51,8 @@ class OasisDataset(Dataset):
             except:
                 continue
 
-            if frame_count < max_seq_len:
-                continue
+            #if frame_count < max_seq_len:
+            #    continue
 
             self.datapoints.append({
                 "id": id,
@@ -71,41 +73,47 @@ class OasisDataset(Dataset):
 
         data = self.datapoints[idx]
 
-        seq_len = self.max_seq_len
-        start_frame = random.randint(1, data["frame_count"] - seq_len) - 1
+        seq_len = min(self.max_seq_len, data["frame_count"])
+        start_frame = random.randint(0, data["frame_count"] - seq_len)
 
-        with open(data["json_path"]) as json_file:
-            json_lines = json_file.readlines()
-            json_data = "[" + ",".join(json_lines) + "]"
-            json_data = json.loads(json_data)
+        if self.load_actions:
+            with open(data["json_path"]) as json_file:
+                json_lines = json_file.readlines()
+                json_data = "[" + ",".join(json_lines) + "]"
+                json_data = json.loads(json_data)
+        else:
+            json_data = [0] * seq_len
 
         frames = []
         actions = []
         with av.open(data["video_path"]) as video:
-            """
             # Rough estimate of the desired frame. Could do some more math
             # and decoding to get the exact frame, but it's not that important
             # https://github.com/PyAV-Org/PyAV/discussions/1113
-            stream = video.streams.video[0]
-            seek_sec = start_frame / stream.average_rate
-            seek_ts = int(seek_sec / stream.time_base)
-            video.seek(seek_ts, stream=stream)
-            """
+            if not self.load_actions:
+                stream = video.streams.video[0]
+                seek_sec = start_frame / stream.average_rate
+                seek_ts = int(seek_sec / stream.time_base)
+                video.seek(seek_ts, stream=stream)
 
             frame_iter = video.decode(video=0)
             for i in range(len(json_data)):
                 # TODO: optimize?
-                if i < start_frame:
+                if self.load_actions and i < start_frame:
                     next(frame_iter)
                     continue
 
                 frame = next(frame_iter)
-                action = json_data[i]
-                action, is_null = process_json_action(action)
 
-                # If nothing happened, skip to the next frame
-                if is_null:
-                    continue
+                if self.load_actions:
+                    action = json_data[i]
+                    action, is_null = process_json_action(action)
+
+                    # If nothing happened, skip to the next frame
+                    if is_null:
+                        continue
+
+                    actions.append(action)
 
                 frame = frame.to_ndarray(
                     width=self.image_size[0],
@@ -113,12 +121,12 @@ class OasisDataset(Dataset):
                     format="rgb24"
                 )
                 frames.append([frame])
-                actions.append(action)
 
                 if len(frames) >= seq_len:
                     break
 
         actions = one_hot_actions(actions)
+        actions = torch.cat([torch.zeros_like(actions[:1]), actions], dim=0) # prepend null action
         frames = np.vstack(frames)
         frames = torch.from_numpy(frames)
         frames = rearrange(frames, "t h w c -> t c h w")
