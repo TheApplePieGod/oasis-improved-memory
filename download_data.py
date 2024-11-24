@@ -17,13 +17,12 @@ def download_url(url, save_dir):
     try:
         response = requests.get(url, stream=True)
         if response.status_code == 200:
-
             with open(filename, 'wb') as file:
                 for chunk in response.iter_content(chunk_size=8192):
                     file.write(chunk)
             return filename
         else:
-            print(f"Failed to download {url}")
+            print(f"Failed to download {url} ({response.status_code})")
             return None
     except Exception as e:
         print(f"Error downloading {url}: {e}")
@@ -61,6 +60,7 @@ def main(args):
     # Validate
     unique_ids = glob.glob(os.path.join(args.out_dir, "*.mp4"))
     unique_ids = list(set([os.path.basename(x).split(".")[0] for x in unique_ids]))
+    print(f"Found {len(unique_ids)} unique videos")
     for id in unique_ids:
         video_path = os.path.abspath(os.path.join(args.out_dir, id + ".mp4"))
         json_path = os.path.abspath(os.path.join(args.out_dir, id + ".jsonl"))
