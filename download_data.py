@@ -48,6 +48,7 @@ def validate_id(id, save_dir):
         except Exception as e:
             tqdm.write(f"ID {id} invalid .jsonl, removing ({e})")
             os.remove(video_path)
+            os.remove(json_path)
 
 
 def main(args):

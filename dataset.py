@@ -13,6 +13,9 @@ import os
 
 
 def oasis_dataset_collate(batch):
+    # Remove null elements (empty sequences)
+    batch = [b for b in batch if b is not None]
+
     # Ensure that the batch has the same sequence lengths if some
     # were cut short
     min_seq = min(x[0].shape[0] for x in batch)
@@ -53,8 +56,9 @@ class OasisDataset(Dataset):
             except:
                 continue
 
-            #if frame_count < max_seq_len:
-            #    continue
+            # Could be a better heuristic but exclude shorter videos 
+            if frame_count < 256:
+                continue
 
             self.datapoints.append({
                 "id": id,
@@ -126,6 +130,10 @@ class OasisDataset(Dataset):
 
                 if len(frames) >= seq_len:
                     break
+
+        # If the sequence is empty, return None rather than an empty tensor
+        if not frames:
+            return None
 
         actions = one_hot_actions(actions)
         actions = torch.cat([torch.zeros_like(actions[:1]), actions], dim=0) # prepend null action
