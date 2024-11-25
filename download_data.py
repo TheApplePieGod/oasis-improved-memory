@@ -1,4 +1,5 @@
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
+from itertools import repeat
 from pprint import pprint
 from tqdm import tqdm
 import requests
@@ -30,6 +31,25 @@ def download_url(url, save_dir):
         return None
 
 
+def validate_id(id, save_dir):
+    video_path = os.path.abspath(os.path.join(save_dir, id + ".mp4"))
+    json_path = os.path.abspath(os.path.join(save_dir, id + ".jsonl"))
+    if not os.path.exists(json_path):
+        tqdm.write(f"ID {id} missing .jsonl, removing")
+        os.remove(video_path)
+    else:
+        # Parse json and ensure valid
+        try:
+            #tqdm.write(f"Loading json {json_path}")
+            with open(json_path) as json_file:
+                json_lines = json_file.readlines()
+                json_data = "[" + ",".join(json_lines) + "]"
+                json_data = json.loads(json_data)
+        except Exception as e:
+            tqdm.write(f"ID {id} invalid .jsonl, removing ({e})")
+            os.remove(video_path)
+
+
 def main(args):
     with open(args.index_path, "r") as f:
         index = json.load(f)
@@ -58,16 +78,13 @@ def main(args):
     with ThreadPoolExecutor(max_workers=args.num_workers) as executor:
         results = list(tqdm(executor.map(download, paths), total=len(paths)))
 
-    # Validate
+    # ===== Validate =====
+
     unique_ids = glob.glob(os.path.join(args.out_dir, "*.mp4"))
     unique_ids = list(set([os.path.basename(x).split(".")[0] for x in unique_ids]))
-    print(f"Found {len(unique_ids)} unique videos")
-    for id in unique_ids:
-        video_path = os.path.abspath(os.path.join(args.out_dir, id + ".mp4"))
-        json_path = os.path.abspath(os.path.join(args.out_dir, id + ".jsonl"))
-        if not os.path.exists(json_path):
-            print(f"ID {id} missing .jsonl, removing")
-            os.remove(video_path)
+    print(f"Found {len(unique_ids)} unique videos, validating...")
+    with ProcessPoolExecutor(max_workers=args.num_workers) as executor:
+        results = list(tqdm(executor.map(validate_id, unique_ids, repeat(args.out_dir)), total=len(unique_ids)))
 
 
 if __name__ == "__main__":
