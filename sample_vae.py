@@ -25,12 +25,14 @@ def plot_latents(model):
         data_dir="data",
         image_size=(image_width, image_height),
         max_seq_len=1,
+        load_actions=False
     )
 
     num_images = 3
     fig = plt.figure()
     for i in range(num_images):
-        x_in = loader.dataset[i].to(default_device)
+        x_in, _ = loader.dataset[i]
+        x_in = x_in.to(default_device)
         with torch.no_grad():
             z = model.encode(x_in).mean
             #z = torch.rand((1, latent_h * latent_w, model.latent_dim)).to(default_device)
@@ -81,7 +83,7 @@ def main(args):
 
     vae = vae.eval()
 
-    #plot_latents(vae)
+    plot_latents(vae)
     compute_scaling_factor(vae)
 
 

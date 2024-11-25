@@ -11,21 +11,22 @@ import os
 def download_url(url, save_dir):
     filename = os.path.join(save_dir, url.split('/')[-1])
     if os.path.exists(filename):
-        print(f"File already exists, skipping: {filename}")
+        tqdm.write(f"File already exists, skipping: {filename}")
         return filename
 
     try:
+        chunk_size = 1024 * 1024
         response = requests.get(url, stream=True)
         if response.status_code == 200:
             with open(filename, 'wb') as file:
-                for chunk in response.iter_content(chunk_size=8192):
+                for chunk in response.iter_content(chunk_size=chunk_size):
                     file.write(chunk)
             return filename
         else:
-            print(f"Failed to download {url} ({response.status_code})")
+            tqdm.write(f"Failed to download {url} ({response.status_code})")
             return None
     except Exception as e:
-        print(f"Error downloading {url}: {e}")
+        tqdm.write(f"Error downloading {url}: {e}")
         return None
 
 

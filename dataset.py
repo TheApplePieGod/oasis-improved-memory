@@ -2,6 +2,7 @@ import torch
 from torch.utils.data import Dataset
 from einops import rearrange
 from actions import process_json_action, one_hot_actions
+from tqdm import tqdm
 import numpy as np
 import random
 import torch
@@ -40,7 +41,8 @@ class OasisDataset(Dataset):
         self.datapoints = []
         unique_ids = glob.glob(os.path.join(data_dir, "*.mp4"))
         unique_ids = list(set([os.path.basename(x).split(".")[0] for x in unique_ids]))
-        for id in unique_ids:
+        print("Loading dataset metadata")
+        for id in tqdm(unique_ids):
             video_path = os.path.abspath(os.path.join(self.data_dir, id + ".mp4"))
             json_path = os.path.abspath(os.path.join(self.data_dir, id + ".jsonl"))
 

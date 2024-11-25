@@ -152,7 +152,7 @@ def train_dit(args):
             A = A.to(default_device)
 
             B, T = X.shape[:2]
-            scaling_factor = 0.96
+            scaling_factor = 0.875795
             X = rearrange(X, "b t c h w -> (b t) c h w")
             with torch.no_grad():
                 with autocast(default_device, dtype=torch.half):
@@ -176,7 +176,6 @@ def train_dit(args):
             snr = snr_arr[t]
             clipped_snr = clipped_snr_arr[t]
 
-            """
             normalized_clipped_snr = clipped_snr / snr_clip
             normalized_snr = snr / snr_clip
             cum_snr = torch.zeros_like(normalized_snr)
@@ -190,12 +189,10 @@ def train_dit(args):
             clipped_fused_snr = 1 - (1 - cum_snr * cum_snr_decay) * (1 - normalized_clipped_snr)
             fused_snr = 1 - (1 - cum_snr * cum_snr_decay) * (1 - normalized_snr)
             loss_weight = clipped_fused_snr / fused_snr
-            """
 
-            loss_weight = clipped_snr / snr
+            #loss_weight = clipped_snr / snr
+
             loss_weight = loss_weight.view(*loss_weight.shape, *((1,) * (loss.ndim - 2)))
-
-            #loss = (loss * loss_weight).sum() / B
             loss = (loss * loss_weight).mean()
 
             loss = loss.mean()
