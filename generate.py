@@ -65,7 +65,7 @@ def main(args):
     # vae encoding
     B, T = x.shape[:2]
     H, W = x.shape[-2:]
-    scaling_factor = 0.875795
+    scaling_factor = 0.9791
     x = rearrange(x, "b t c h w -> (b t) c h w")
     with torch.no_grad():
         with autocast(default_device, dtype=torch.half):

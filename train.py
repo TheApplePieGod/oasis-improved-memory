@@ -152,7 +152,7 @@ def train_dit(args):
             A = A.to(default_device)
 
             B, T = X.shape[:2]
-            scaling_factor = 0.875795
+            scaling_factor = 0.9791
             X = rearrange(X, "b t c h w -> (b t) c h w")
             with torch.no_grad():
                 with autocast(default_device, dtype=torch.half):

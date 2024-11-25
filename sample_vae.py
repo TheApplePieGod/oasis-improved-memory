@@ -14,7 +14,7 @@ import numpy as np
 import os
 
 
-def plot_latents(model):
+def plot_latents(model, args):
     image_width = model.input_width
     image_height = model.input_height
     latent_w = image_width // model.patch_size
@@ -22,7 +22,7 @@ def plot_latents(model):
 
     loader = get_dataloader(
         1,
-        data_dir="data",
+        data_dir=args.data_dir,
         image_size=(image_width, image_height),
         max_seq_len=1,
         load_actions=False
@@ -48,11 +48,11 @@ def plot_latents(model):
     plt.show()
 
 
-def compute_scaling_factor(model):
+def compute_scaling_factor(model, args):
     all_latents = []
     loader = get_dataloader(
         1,
-        data_dir="data",
+        data_dir=args.data_dir,
         image_size=(model.input_width, model.input_height),
         max_seq_len=50,
         load_actions=False
@@ -83,8 +83,8 @@ def main(args):
 
     vae = vae.eval()
 
-    plot_latents(vae)
-    compute_scaling_factor(vae)
+    plot_latents(vae, args)
+    compute_scaling_factor(vae, args)
 
 
 if __name__ == "__main__":
@@ -95,6 +95,12 @@ if __name__ == "__main__":
         type=str,
         help="Path to Oasis ViT-VAE checkpoint.",
         default=None
+    )
+    parse.add_argument(
+        "--data-dir",
+        type=str,
+        help="Dataset directory",
+        default="data",
     )
 
     args = parse.parse_args()
