@@ -48,7 +48,7 @@ def main(args):
         actions = load_actions(args.actions_path, action_offset=args.video_offset)[:, :total_frames]
     else:
         loader = get_dataloader(
-            1,
+            1, 1,
             data_dir="data",
             image_size=(vae.input_width, vae.input_height),
             max_seq_len=total_frames,
@@ -65,7 +65,7 @@ def main(args):
     # vae encoding
     B, T = x.shape[:2]
     H, W = x.shape[-2:]
-    scaling_factor = 0.9791
+    scaling_factor = 1.01398
     x = rearrange(x, "b t c h w -> (b t) c h w")
     with torch.no_grad():
         with autocast(default_device, dtype=torch.half):

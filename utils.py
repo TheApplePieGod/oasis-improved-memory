@@ -16,6 +16,7 @@ from dit import DiT_models
 from vae import VAE_models
 from dataset import OasisDataset, oasis_dataset_collate
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 import os
 
 
@@ -136,14 +137,14 @@ def load_models(dit_ckpt, vae_ckpt, default_img_size):
     return model, vae
 
 
-def get_dataloader(batch, **kwargs):
+def get_dataloader(batch, num_workers, **kwargs):
     dataset = OasisDataset(**kwargs)
     return DataLoader(
         dataset,
         collate_fn=oasis_dataset_collate,
         batch_size=batch,
         shuffle=True,
-        num_workers=4,
+        num_workers=num_workers,
         pin_memory=False,
         prefetch_factor=1,
         persistent_workers=True

@@ -32,6 +32,7 @@ def train_vae(args):
 
     train_loader = get_dataloader(
         args.batch,
+        args.num_workers,
         data_dir=args.data_dir,
         image_size=(model.input_width, model.input_height),
         max_seq_len=1,
@@ -136,10 +137,12 @@ def train_dit(args):
 
     train_loader = get_dataloader(
         args.batch,
+        args.num_workers,
         data_dir=args.data_dir,
         image_size=(vae.input_width, vae.input_height),
         max_seq_len=n_prompt_frames,
-        #max_datapoints=10
+        preload_json=args.preload_json,
+        #max_datapoints=100
     )
 
     writer = SummaryWriter("logs/dit/summary")
@@ -156,7 +159,7 @@ def train_dit(args):
             A = A.to(default_device)
 
             B, T = X.shape[:2]
-            scaling_factor = 0.9791
+            scaling_factor = 1.01398
             X = rearrange(X, "b t c h w -> (b t) c h w")
             with torch.no_grad():
                 with autocast(default_device, dtype=torch.half):
@@ -286,6 +289,18 @@ if __name__ == "__main__":
         type=int,
         default=10,
         help="Number of steps for the warmup in the lr scheduler.",
+    )
+    parse.add_argument(
+        "--num-workers",
+        type=int,
+        default=4,
+        help="Number of workers to assist with data loading",
+    )
+    parse.add_argument(
+        "--preload-json",
+        type=bool,
+        default=False,
+        help="Whether or not to preload the dataset JSON data to prevent parsing at runtime",
     )
     parse.add_argument(
         "--data-dir",

@@ -21,7 +21,7 @@ def plot_latents(model, args):
     latent_h = image_height // model.patch_size
 
     loader = get_dataloader(
-        1,
+        1, 1,
         data_dir=args.data_dir,
         image_size=(image_width, image_height),
         max_seq_len=1,
@@ -51,11 +51,12 @@ def plot_latents(model, args):
 def compute_scaling_factor(model, args):
     all_latents = []
     loader = get_dataloader(
-        1,
+        4, 1,
         data_dir=args.data_dir,
         image_size=(model.input_width, model.input_height),
-        max_seq_len=50,
-        load_actions=False
+        max_seq_len=1,
+        load_actions=False,
+        #max_datapoints=100
     )
     with torch.no_grad():
         for X, _ in tqdm(loader):
@@ -83,7 +84,7 @@ def main(args):
 
     vae = vae.eval()
 
-    plot_latents(vae, args)
+    #plot_latents(vae, args)
     compute_scaling_factor(vae, args)
 
 

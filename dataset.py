@@ -1,15 +1,20 @@
-import torch
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 from torch.utils.data import Dataset
 from einops import rearrange
 from actions import process_json_action, one_hot_actions
 from tqdm import tqdm
 import numpy as np
+import msgspec
 import random
 import torch
+import time
 import glob
-import json
 import av
 import os
+
+
+def print_timing(name, start, end):
+    tqdm.write(f"{name} took {(end-start)*1000:.2f}ms")
 
 
 def oasis_dataset_collate(batch):
@@ -32,7 +37,8 @@ class OasisDataset(Dataset):
         image_size,
         max_seq_len,
         max_datapoints=None,
-        load_actions=True
+        load_actions=True,
+        preload_json=False
     ):
         assert max_seq_len > 0
 
@@ -40,12 +46,14 @@ class OasisDataset(Dataset):
         self.image_size = image_size
         self.max_seq_len = max_seq_len
         self.load_actions = load_actions
+        self.preload_json = preload_json
 
         self.datapoints = []
         unique_ids = glob.glob(os.path.join(data_dir, "*.mp4"))
         unique_ids = list(set([os.path.basename(x).split(".")[0] for x in unique_ids]))
         print("Loading dataset metadata")
-        for id in tqdm(unique_ids):
+
+        def load_id(id):
             video_path = os.path.abspath(os.path.join(self.data_dir, id + ".mp4"))
             json_path = os.path.abspath(os.path.join(self.data_dir, id + ".jsonl"))
 
@@ -54,24 +62,46 @@ class OasisDataset(Dataset):
                     video_stream = video.streams.video[0]
                     frame_count = video_stream.frames  # Total number of frames
             except:
-                continue
+                return
 
             # Could be a better heuristic but exclude shorter videos 
             if frame_count < 256:
-                continue
+                return
 
-            self.datapoints.append({
+            json_data = None
+            if self.preload_json:
+                json_data = self.load_json(json_path)
+
+            return {
                 "id": id,
                 "video_path": video_path,
                 "json_path": json_path,
+                "json_data": json_data,
                 "frame_count": int(frame_count)
-            })
+            }
+
+        # If we are preloading the json, do it in parallel since it is slow. Otherwise, the overhead is too high
+        # so don't parallelize it
+        if self.preload_json:
+            with ThreadPoolExecutor() as executor:
+                self.datapoints = list(tqdm(executor.map(load_id, unique_ids), total=len(unique_ids)))
+                self.datapoints = [d for d in self.datapoints if d is not None]
+        else:
+            self.datapoints = []
+            for id in tqdm(unique_ids):
+                loaded = load_id(id)
+                if loaded is not None:
+                    self.datapoints.append(loaded)
 
         if max_datapoints is not None:
             assert max_datapoints > 0
             self.datapoints = self.datapoints[:max_datapoints]
 
         print(f"Dataset initialized with {len(self.datapoints)} datapoints")
+
+    def load_json(self, path):
+        with open(path) as f:
+            return [msgspec.json.decode(l) for l in f]
 
     def __getitem__(self, idx):
         # T C H W
@@ -81,14 +111,15 @@ class OasisDataset(Dataset):
 
         seq_len = min(self.max_seq_len, data["frame_count"])
         start_frame = random.randint(0, data["frame_count"] - seq_len)
+        start_time = time.time()
 
         if self.load_actions:
-            with open(data["json_path"]) as json_file:
-                json_lines = json_file.readlines()
-                json_data = "[" + ",".join(json_lines) + "]"
-                json_data = json.loads(json_data)
+            if self.preload_json:
+                json_data = data["json_data"]
+            else:
+                json_data = self.load_json(data["json_path"])
         else:
-            json_data = [0] * seq_len
+            json_data = [0] * data["frame_count"]
 
         frames = []
         actions = []
@@ -96,21 +127,17 @@ class OasisDataset(Dataset):
             # Rough estimate of the desired frame. Could do some more math
             # and decoding to get the exact frame, but it's not that important
             # https://github.com/PyAV-Org/PyAV/discussions/1113
-            if not self.load_actions:
-                stream = video.streams.video[0]
-                seek_sec = start_frame / stream.average_rate
-                seek_ts = int(seek_sec / stream.time_base)
-                video.seek(seek_ts, stream=stream)
-
+            stream = video.streams.video[0]
+            seek_sec = start_frame / stream.average_rate
+            seek_ts = round(seek_sec / stream.time_base)
+            video.seek(seek_ts, stream=stream)
+            
+            # Compute the actual start frame we seeked to
             frame_iter = video.decode(video=0)
-            for i in range(len(json_data)):
-                # TODO: optimize?
-                if self.load_actions and i < start_frame:
-                    next(frame_iter)
-                    continue
+            frame = next(frame_iter)
+            start_frame = int(frame.pts * stream.time_base * stream.average_rate)
 
-                frame = next(frame_iter)
-
+            for i in range(start_frame, len(json_data)):
                 if self.load_actions:
                     action = json_data[i]
                     action, is_null = process_json_action(action)
@@ -131,9 +158,14 @@ class OasisDataset(Dataset):
                 if len(frames) >= seq_len:
                     break
 
+                frame = next(frame_iter)
+
         # If the sequence is empty, return None rather than an empty tensor
         if not frames:
             return None
+
+        end_time = time.time()
+        #print_timing("Loading frame", start_time, end_time)
 
         actions = one_hot_actions(actions)
         actions = torch.cat([torch.zeros_like(actions[:1]), actions], dim=0) # prepend null action

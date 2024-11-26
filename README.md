@@ -24,7 +24,7 @@ pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
 # ------
 
 # Install other deps
-pip install einops diffusers timm av tensorboard lpips
+pip install einops diffusers timm av tensorboard lpips msgspec
 ```
 
 ## Download the model weights
