@@ -146,7 +146,11 @@ def train_dit(args):
     for epoch in range(args.epochs):
         avg_train_loss = 0
         train_steps = 0
+        prev_time = time.time()
         for X, A in tqdm(train_loader):
+            next_time = time.time()
+            #tqdm.write(f"One batch: {(next_time - prev_time)*1000:.2f} ms")
+
             optimizer.zero_grad()
             X = X.to(default_device)
             A = A.to(default_device)
@@ -169,33 +173,36 @@ def train_dit(args):
             e = torch.randn_like(X)
             e = torch.clamp(e, -noise_clip, noise_clip)
             x_t = forward_sample(X, t, e)
-            e_pred = model(x_t, t, A)
-            e_pred = torch.clamp(e_pred, -noise_clip, noise_clip)
-            loss = torch.nn.functional.mse_loss(e, e_pred, reduction="none")
+            with autocast(default_device, dtype=torch.half):
+                e_pred = model(x_t, t, A)
+                e_pred = torch.clamp(e_pred, -noise_clip, noise_clip)
+                loss = torch.nn.functional.mse_loss(e, e_pred, reduction="none")
 
-            snr = snr_arr[t]
-            clipped_snr = clipped_snr_arr[t]
+                snr = snr_arr[t]
+                clipped_snr = clipped_snr_arr[t]
 
-            normalized_clipped_snr = clipped_snr / snr_clip
-            normalized_snr = snr / snr_clip
-            cum_snr = torch.zeros_like(normalized_snr)
-            for frame_idx in range(0, T):
-                if frame_idx == 0:
-                    cum_snr[:, frame_idx] = normalized_clipped_snr[:, frame_idx]
+                fused_snr = True
+                if fused_snr:
+                    normalized_clipped_snr = clipped_snr / snr_clip
+                    normalized_snr = snr / snr_clip
+                    cum_snr = torch.zeros_like(normalized_snr)
+                    for frame_idx in range(0, T):
+                        if frame_idx == 0:
+                            cum_snr[:, frame_idx] = normalized_clipped_snr[:, frame_idx]
+                        else:
+                            cum_snr[:, frame_idx] = cum_snr_decay * cum_snr[:, frame_idx - 1] + (1 - cum_snr_decay) * normalized_clipped_snr[:, frame_idx]
+
+                    cum_snr = torch.nn.functional.pad(cum_snr[:, :-1], (0, 0, 0, 0, 0, 0, 1, 0), value=0.0)
+                    clipped_fused_snr = 1 - (1 - cum_snr * cum_snr_decay) * (1 - normalized_clipped_snr)
+                    fused_snr = 1 - (1 - cum_snr * cum_snr_decay) * (1 - normalized_snr)
+                    loss_weight = clipped_fused_snr / fused_snr
                 else:
-                    cum_snr[:, frame_idx] = cum_snr_decay * cum_snr[:, frame_idx - 1] + (1 - cum_snr_decay) * normalized_clipped_snr[:, frame_idx]
+                    loss_weight = clipped_snr / snr
 
-            cum_snr = torch.nn.functional.pad(cum_snr[:, :-1], (0, 0, 0, 0, 0, 0, 1, 0), value=0.0)
-            clipped_fused_snr = 1 - (1 - cum_snr * cum_snr_decay) * (1 - normalized_clipped_snr)
-            fused_snr = 1 - (1 - cum_snr * cum_snr_decay) * (1 - normalized_snr)
-            loss_weight = clipped_fused_snr / fused_snr
+                loss_weight = loss_weight.view(*loss_weight.shape, *((1,) * (loss.ndim - 2)))
+                loss = (loss * loss_weight).mean()
 
-            #loss_weight = clipped_snr / snr
-
-            loss_weight = loss_weight.view(*loss_weight.shape, *((1,) * (loss.ndim - 2)))
-            loss = (loss * loss_weight).mean()
-
-            loss = loss.mean()
+                loss = loss.mean()
 
             loss.backward()
 
@@ -203,6 +210,8 @@ def train_dit(args):
             train_steps += 1
 
             optimizer.step()
+
+            prev_time = time.time()
 
         avg_train_loss = avg_train_loss / train_steps
 
@@ -216,7 +225,8 @@ def train_dit(args):
             save_state_dict(
                 {
                     "epoch": epoch,
-                    "dit_state_dict": model.state_dict()
+                    "dit_state_dict": model.state_dict(),
+                    "model": "DiT-S/2-Small"
                 },
                 "logs/dit/ckpt",
                 f"model_{epoch}.pt"

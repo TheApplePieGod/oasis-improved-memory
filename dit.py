@@ -329,5 +329,14 @@ def DiT_S_2(**kwargs):
         **kwargs
     )
 
+def DiT_S_2_Small(**kwargs):
+    return DiT(
+        patch_size=2,
+        hidden_size=768,
+        depth=14,
+        num_heads=14,
+        max_frames=24,
+        **kwargs
+    )
 
-DiT_models = {"DiT-S/2": DiT_S_2}
+DiT_models = {"DiT-S/2": DiT_S_2, "DiT-S/2-Small": DiT_S_2_Small}

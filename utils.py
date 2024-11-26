@@ -107,17 +107,29 @@ def load_models(dit_ckpt, vae_ckpt, default_img_size):
 
     # ------------
 
-    model = DiT_models["DiT-S/2"](
-        input_w=vae.seq_w,
-        input_h=vae.seq_h
-    )
+    def load_dit(name):
+        print(f"Loading DiT {name}")
+        return DiT_models[name](
+            input_w=vae.seq_w,
+            input_h=vae.seq_h
+        )
+
+    model = None
     if dit_ckpt is not None:
         print(f"loading Oasis-500M from oasis-ckpt={os.path.abspath(dit_ckpt)}...")
         if dit_ckpt.endswith(".pt"):
             ckpt = torch.load(dit_ckpt)
+            if "model" in ckpt:
+                model = load_dit(ckpt["model"])
+            else:
+                model = load_dit("DiT-S/2")
             model.load_state_dict(ckpt["dit_state_dict"], strict=False)
         elif dit_ckpt.endswith(".safetensors"):
+            model = load_dit("DiT-S/2")
             load_model(model, dit_ckpt)
+
+    if model is None:
+        model = load_dit("DiT-S/2-Small")
 
     model = model.to(default_device)
 
