@@ -87,8 +87,16 @@ def process_json_action(json_action):
     Converts a json action into a processed form, ready
     to be one-hot encoded
     """
+
     # This might be slow...
     env_action = NOOP_ACTION.copy()
+
+    if "mouse" not in json_action:
+        # This kind of action is already preprocessed
+        for k, v in json_action.items():
+            env_action[k] = v
+        return env_action, False
+
     # As a safeguard, make camera action again so we do not override anything
     env_action["camera"] = np.array([0, 0])
 

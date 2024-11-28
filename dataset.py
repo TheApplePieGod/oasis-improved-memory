@@ -101,7 +101,7 @@ class OasisDataset(Dataset):
 
     def load_json(self, path):
         with open(path) as f:
-            return [msgspec.json.decode(l) for l in f]
+            return [process_json_action(msgspec.json.decode(l)) for l in f]
 
     def __getitem__(self, idx):
         # T C H W
@@ -139,8 +139,7 @@ class OasisDataset(Dataset):
 
             for i in range(start_frame, len(json_data)):
                 if self.load_actions:
-                    action = json_data[i]
-                    action, is_null = process_json_action(action)
+                    action, is_null = json_data[i]
 
                     # If nothing happened, skip to the next frame
                     if is_null:
