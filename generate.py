@@ -49,7 +49,7 @@ def main(args):
     else:
         loader = get_dataloader(
             1, 1,
-            data_dir="data",
+            data_dir=args.data_dir,
             image_size=(vae.input_width, vae.input_height),
             max_seq_len=total_frames,
             #max_datapoints=1
@@ -150,6 +150,12 @@ if __name__ == "__main__":
         type=int,
         help="How many frames should the output be?",
         default=32,
+    )
+    parse.add_argument(
+        "--data-dir",
+        type=str,
+        help="Data directory when not loading a fixed sample",
+        default="data",
     )
     parse.add_argument(
         "--prompt-path",
