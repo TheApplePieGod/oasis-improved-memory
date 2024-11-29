@@ -367,5 +367,5 @@ def ViT_L_Small(**kwargs):
 
 VAE_models = {
     "vit-l-20-shallow-encoder": ViT_L_20_Shallow_Encoder,
-    "vit-l-small": ViT_L_Small,
+    "vae-l-small": ViT_L_Small,
 }

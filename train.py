@@ -112,12 +112,14 @@ def train_vae(args):
 
 
 def train_dit(args):
-    img_size = parse_img_size(args.default_img_size)
-    model, vae = load_models(args.dit_ckpt, args.vae_ckpt, img_size, not args.use_vae)
+    model, vae = load_models(args.dit_ckpt, args.vae_ckpt, parse_img_size(args.default_img_size), not args.use_vae)
     model = model.train()
     model.requires_grad_(True)
     if vae:
         vae = vae.eval()
+        img_size = (vae.input_width, vae.input_height)
+    else:
+        img_size = (model.input_w, model.input_h)
 
     # params
     max_timesteps = 1000
@@ -168,11 +170,10 @@ def train_dit(args):
             B, T = X.shape[:2]
             
             if args.use_vae:
-                scaling_factor = 1.01398
                 X = rearrange(X, "b t c h w -> (b t) c h w")
                 with torch.no_grad():
                     with autocast(default_device, dtype=torch.half):
-                        X = vae.encode(X).sample() * scaling_factor
+                        X = vae.encode(X).sample() * args.vae_scale
                 X = rearrange(X, "(b t) (h w) c -> b t c h w", t=T, h=vae.seq_h, w=vae.seq_w)
 
             # Sample a batch of times for training
@@ -301,6 +302,12 @@ if __name__ == "__main__":
         type=int,
         default=10,
         help="Number of steps for the warmup in the lr scheduler.",
+    )
+    parse.add_argument(
+        "--vae-scale",
+        type=float,
+        required=True,
+        help="Scaling factor for transforming the VAE before DiT training",
     )
     parse.add_argument(
         "--num-workers",

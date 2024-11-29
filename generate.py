@@ -72,11 +72,10 @@ def main(args):
     # vae encoding
     B, T = x.shape[:2]
     if args.use_vae:
-        scaling_factor = 1.01398
         x = rearrange(x, "b t c h w -> (b t) c h w")
         with torch.no_grad():
             with autocast(default_device, dtype=torch.half):
-                x = vae.encode(x).mean * scaling_factor
+                x = vae.encode(x).mean * args.vae_scale
         x = rearrange(x, "(b t) (h w) c -> b t c h w", t=T, h=vae.seq_h, w=vae.seq_w)
 
     x = x[:, :n_prompt_frames]
@@ -129,7 +128,7 @@ def main(args):
         # vae decoding
         x = rearrange(x, "b t c h w -> (b t) (h w) c").float()
         with torch.no_grad():
-            x = (vae.decode(x / scaling_factor) + 1) / 2
+            x = (vae.decode(x / args.vae_scale) + 1) / 2
         x = rearrange(x, "(b t) c h w -> b t h w c", t=total_frames)
     else:
         x = (x + 1) / 2
@@ -210,6 +209,12 @@ if __name__ == "__main__":
         type=int,
         help="What framerate should be used to save the output?",
         default=20,
+    )
+    parse.add_argument(
+        "--vae-scale",
+        type=float,
+        required=True,
+        help="Scaling factor for transforming the VAE before DiT training",
     )
     parse.add_argument("--ddim-steps", type=int, help="How many DDIM steps?", default=10)
 

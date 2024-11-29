@@ -339,4 +339,13 @@ def DiT_S_2_Small(**kwargs):
         **kwargs
     )
 
-DiT_models = {"DiT-S/2": DiT_S_2, "DiT-S/2-Small": DiT_S_2_Small}
+def DiT_S_2_XS(**kwargs):
+    return DiT(
+        hidden_size=512,
+        depth=8,
+        num_heads=8,
+        max_frames=24,
+        **kwargs
+    )
+
+DiT_models = {"DiT-S/2": DiT_S_2, "DiT-S/2-Small": DiT_S_2_Small, "DiT-S/2-XS": DiT_S_2_XS}

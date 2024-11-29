@@ -90,7 +90,7 @@ def load_models(dit_ckpt, vae_ckpt, default_img_size, skip_vae=False):
             if vae_ckpt.endswith(".pt"):
                 # Load size info from the checkpoint
                 vae_ckpt = torch.load(vae_ckpt)
-                if "model" in ckpt:
+                if "model" in vae_ckpt:
                     model_name = vae_ckpt["model"]
                 else:
                     model_name = "vit-l-20-shallow-encoder"
@@ -119,7 +119,7 @@ def load_models(dit_ckpt, vae_ckpt, default_img_size, skip_vae=False):
             patch_size = ckpt["patch_size"] if ckpt is not None and "patch_size" in ckpt else 16
             return DiT_models[name](input_w=width, input_h=height, in_channels=3, patch_size=patch_size)
         else:
-            return DiT_models[name](input_w=vae.seq_w, input_h=vae.seq_h, patch_size=2)
+            return DiT_models[name](input_w=vae.seq_w, input_h=vae.seq_h, in_channels=vae.latent_dim, patch_size=2)
 
     model = None
     if dit_ckpt is not None:
