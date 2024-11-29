@@ -38,7 +38,8 @@ class OasisDataset(Dataset):
         max_seq_len,
         max_datapoints=None,
         load_actions=True,
-        preload_json=False
+        preload_json=False,
+        preload_videos=False
     ):
         assert max_seq_len > 0
 
@@ -47,6 +48,7 @@ class OasisDataset(Dataset):
         self.max_seq_len = max_seq_len
         self.load_actions = load_actions
         self.preload_json = preload_json
+        self.preload_videos = preload_videos
 
         self.datapoints = []
         unique_ids = glob.glob(os.path.join(data_dir, "*.mp4"))
@@ -72,17 +74,25 @@ class OasisDataset(Dataset):
             if self.preload_json:
                 json_data = self.load_json(json_path)
 
+            video_data = None
+            if self.preload_videos:
+                video_data = []
+                with av.open(video_path) as video:
+                    for frame in video.decode(video=0):
+                        video_data.append(self.process_frame(frame))
+
             return {
                 "id": id,
                 "video_path": video_path,
                 "json_path": json_path,
                 "json_data": json_data,
+                "video_data": video_data,
                 "frame_count": int(frame_count)
             }
 
-        # If we are preloading the json, do it in parallel since it is slow. Otherwise, the overhead is too high
+        # If we are preloading data, do it in parallel since it is slow. Otherwise, the overhead is too high
         # so don't parallelize it
-        if self.preload_json:
+        if self.preload_json or self.preload_videos:
             with ThreadPoolExecutor() as executor:
                 self.datapoints = list(tqdm(executor.map(load_id, unique_ids), total=len(unique_ids)))
                 self.datapoints = [d for d in self.datapoints if d is not None]
@@ -102,6 +112,13 @@ class OasisDataset(Dataset):
     def load_json(self, path):
         with open(path) as f:
             return [process_json_action(msgspec.json.decode(l)) for l in f]
+
+    def process_frame(self, frame):
+        return frame.to_ndarray(
+            width=self.image_size[0],
+            height=self.image_size[1],
+            format="rgb24"
+        )
 
     def __getitem__(self, idx):
         # T C H W
@@ -123,20 +140,8 @@ class OasisDataset(Dataset):
 
         frames = []
         actions = []
-        with av.open(data["video_path"]) as video:
-            # Rough estimate of the desired frame. Could do some more math
-            # and decoding to get the exact frame, but it's not that important
-            # https://github.com/PyAV-Org/PyAV/discussions/1113
-            stream = video.streams.video[0]
-            seek_sec = start_frame / stream.average_rate
-            seek_ts = round(seek_sec / stream.time_base)
-            video.seek(seek_ts, stream=stream)
-            
-            # Compute the actual start frame we seeked to
-            frame_iter = video.decode(video=0)
-            frame = next(frame_iter)
-            start_frame = int(frame.pts * stream.time_base * stream.average_rate)
 
+        if self.preload_videos:
             for i in range(start_frame, len(json_data)):
                 if self.load_actions:
                     action, is_null = json_data[i]
@@ -147,17 +152,43 @@ class OasisDataset(Dataset):
 
                     actions.append(action)
 
-                frame = frame.to_ndarray(
-                    width=self.image_size[0],
-                    height=self.image_size[1],
-                    format="rgb24"
-                )
-                frames.append([frame])
+                frame = data["video_data"][i]
+                frames.append(frame)
 
                 if len(frames) >= seq_len:
                     break
-
+        else:
+            with av.open(data["video_path"]) as video:
+                # Rough estimate of the desired frame. Could do some more math
+                # and decoding to get the exact frame, but it's not that important
+                # https://github.com/PyAV-Org/PyAV/discussions/1113
+                stream = video.streams.video[0]
+                seek_sec = start_frame / stream.average_rate
+                seek_ts = round(seek_sec / stream.time_base)
+                video.seek(seek_ts, stream=stream)
+                
+                # Compute the actual start frame we seeked to
+                frame_iter = video.decode(video=0)
                 frame = next(frame_iter)
+                start_frame = int(frame.pts * stream.time_base * stream.average_rate)
+
+                for i in range(start_frame, len(json_data)):
+                    if self.load_actions:
+                        action, is_null = json_data[i]
+
+                        # If nothing happened, skip to the next frame
+                        if is_null:
+                            continue
+
+                        actions.append(action)
+
+                    frame = self.process_frame(frame)
+                    frames.append(frame)
+
+                    if len(frames) >= seq_len:
+                        break
+
+                    frame = next(frame_iter)
 
         # If the sequence is empty, return None rather than an empty tensor
         if not frames:
@@ -168,7 +199,7 @@ class OasisDataset(Dataset):
 
         actions = one_hot_actions(actions)
         actions = torch.cat([torch.zeros_like(actions[:1]), actions], dim=0) # prepend null action
-        frames = np.vstack(frames)
+        frames = np.stack(frames)
         frames = torch.from_numpy(frames)
         frames = rearrange(frames, "t h w c -> t c h w")
         frames = frames.float() / 255.0  # Normalize to [0, 1]

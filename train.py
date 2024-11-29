@@ -6,6 +6,7 @@ from tqdm import tqdm
 from einops import rearrange
 from torch import autocast
 from torch import optim
+from distutils.util import strtobool
 import argparse
 from pprint import pprint
 from config import default_device
@@ -37,12 +38,13 @@ def train_vae(args):
         image_size=(model.input_width, model.input_height),
         max_seq_len=1,
         load_actions=False,
+        preload_videos=args.preload_videos
         #max_datapoints=1
     )
 
     lpips_loss_fn = lpips.LPIPS(net="alex").to(default_device)
 
-    writer = SummaryWriter("logs/vae/summary")
+    writer = SummaryWriter(f"logs/{args.vae_exp_name}/summary")
     for epoch in range(args.epochs):
         avg_train_loss = 0
         avg_recon_loss = 0
@@ -100,8 +102,9 @@ def train_vae(args):
                     "vae_state_dict": model.state_dict(),
                     "input_width": model.input_width,
                     "input_height": model.input_height,
+                    "model": "vae-l-small"
                 },
-                "logs/vae/ckpt",
+                f"logs/{args.vae_exp_name}/ckpt",
                 f"model_{epoch}.pt"
             )
 
@@ -109,9 +112,12 @@ def train_vae(args):
 
 
 def train_dit(args):
-    model, vae = load_models(args.dit_ckpt, args.vae_ckpt, (0, 0))
+    img_size = parse_img_size(args.default_img_size)
+    model, vae = load_models(args.dit_ckpt, args.vae_ckpt, img_size, not args.use_vae)
     model = model.train()
     model.requires_grad_(True)
+    if vae:
+        vae = vae.eval()
 
     # params
     max_timesteps = 1000
@@ -139,13 +145,14 @@ def train_dit(args):
         args.batch,
         args.num_workers,
         data_dir=args.data_dir,
-        image_size=(vae.input_width, vae.input_height),
+        image_size=img_size,
         max_seq_len=n_prompt_frames,
         preload_json=args.preload_json,
+        preload_videos=args.preload_videos
         #max_datapoints=100
     )
 
-    writer = SummaryWriter("logs/dit/summary")
+    writer = SummaryWriter(f"logs/{args.dit_exp_name}/summary")
     for epoch in range(args.epochs):
         avg_train_loss = 0
         train_steps = 0
@@ -159,12 +166,14 @@ def train_dit(args):
             A = A.to(default_device)
 
             B, T = X.shape[:2]
-            scaling_factor = 1.01398
-            X = rearrange(X, "b t c h w -> (b t) c h w")
-            with torch.no_grad():
-                with autocast(default_device, dtype=torch.half):
-                    X = vae.encode(X).sample() * scaling_factor
-            X = rearrange(X, "(b t) (h w) c -> b t c h w", t=T, h=vae.seq_h, w=vae.seq_w)
+            
+            if args.use_vae:
+                scaling_factor = 1.01398
+                X = rearrange(X, "b t c h w -> (b t) c h w")
+                with torch.no_grad():
+                    with autocast(default_device, dtype=torch.half):
+                        X = vae.encode(X).sample() * scaling_factor
+                X = rearrange(X, "(b t) (h w) c -> b t c h w", t=T, h=vae.seq_h, w=vae.seq_w)
 
             # Sample a batch of times for training
             #t_ctx = torch.full((B, T - 1), 0, dtype=torch.long, device=default_device)
@@ -176,36 +185,36 @@ def train_dit(args):
             e = torch.randn_like(X)
             e = torch.clamp(e, -noise_clip, noise_clip)
             x_t = forward_sample(X, t, e)
-            with autocast(default_device, dtype=torch.half):
+            with autocast(default_device, dtype=torch.half, enabled=args.fp16):
                 e_pred = model(x_t, t, A)
-                e_pred = torch.clamp(e_pred, -noise_clip, noise_clip)
-                loss = torch.nn.functional.mse_loss(e, e_pred, reduction="none")
+            e_pred = torch.clamp(e_pred, -noise_clip, noise_clip)
+            loss = torch.nn.functional.mse_loss(e, e_pred.float(), reduction="none")
 
-                snr = snr_arr[t]
-                clipped_snr = clipped_snr_arr[t]
+            snr = snr_arr[t]
+            clipped_snr = clipped_snr_arr[t]
 
-                fused_snr = True
-                if fused_snr:
-                    normalized_clipped_snr = clipped_snr / snr_clip
-                    normalized_snr = snr / snr_clip
-                    cum_snr = torch.zeros_like(normalized_snr)
-                    for frame_idx in range(0, T):
-                        if frame_idx == 0:
-                            cum_snr[:, frame_idx] = normalized_clipped_snr[:, frame_idx]
-                        else:
-                            cum_snr[:, frame_idx] = cum_snr_decay * cum_snr[:, frame_idx - 1] + (1 - cum_snr_decay) * normalized_clipped_snr[:, frame_idx]
+            fused_snr = True
+            if fused_snr:
+                normalized_clipped_snr = clipped_snr / snr_clip
+                normalized_snr = snr / snr_clip
+                cum_snr = torch.zeros_like(normalized_snr)
+                for frame_idx in range(0, T):
+                    if frame_idx == 0:
+                        cum_snr[:, frame_idx] = normalized_clipped_snr[:, frame_idx]
+                    else:
+                        cum_snr[:, frame_idx] = cum_snr_decay * cum_snr[:, frame_idx - 1] + (1 - cum_snr_decay) * normalized_clipped_snr[:, frame_idx]
 
-                    cum_snr = torch.nn.functional.pad(cum_snr[:, :-1], (0, 0, 0, 0, 0, 0, 1, 0), value=0.0)
-                    clipped_fused_snr = 1 - (1 - cum_snr * cum_snr_decay) * (1 - normalized_clipped_snr)
-                    fused_snr = 1 - (1 - cum_snr * cum_snr_decay) * (1 - normalized_snr)
-                    loss_weight = clipped_fused_snr / fused_snr
-                else:
-                    loss_weight = clipped_snr / snr
+                cum_snr = torch.nn.functional.pad(cum_snr[:, :-1], (0, 0, 0, 0, 0, 0, 1, 0), value=0.0)
+                clipped_fused_snr = 1 - (1 - cum_snr * cum_snr_decay) * (1 - normalized_clipped_snr)
+                fused_snr = 1 - (1 - cum_snr * cum_snr_decay) * (1 - normalized_snr)
+                loss_weight = clipped_fused_snr / fused_snr
+            else:
+                loss_weight = clipped_snr / snr
 
-                loss_weight = loss_weight.view(*loss_weight.shape, *((1,) * (loss.ndim - 2)))
-                loss = (loss * loss_weight).mean()
+            loss_weight = loss_weight.view(*loss_weight.shape, *((1,) * (loss.ndim - 2)))
+            loss = (loss * loss_weight).mean()
 
-                loss = loss.mean()
+            loss = loss.mean()
 
             loss.backward()
 
@@ -229,9 +238,12 @@ def train_dit(args):
                 {
                     "epoch": epoch,
                     "dit_state_dict": model.state_dict(),
+                    "input_width": model.input_w,
+                    "input_height": model.input_h,
+                    "patch_size": model.patch_size,
                     "model": "DiT-S/2-Small"
                 },
-                "logs/dit/ckpt",
+                f"logs/{args.dit_exp_name}/ckpt",
                 f"model_{epoch}.pt"
             )
 
@@ -270,7 +282,7 @@ if __name__ == "__main__":
         "--default-img-size",
         type=str,
         help="Default size of the input images, 'WxH'",
-        default="640x320",
+        default="320x160",
     )
     parse.add_argument(
         "--kl-scale",
@@ -298,9 +310,27 @@ if __name__ == "__main__":
     )
     parse.add_argument(
         "--preload-json",
-        type=bool,
+        type=lambda x: bool(strtobool(x)),
         default=False,
         help="Whether or not to preload the dataset JSON data to prevent parsing at runtime",
+    )
+    parse.add_argument(
+        "--preload-videos",
+        type=lambda x: bool(strtobool(x)),
+        default=False,
+        help="Whether or not to preload the dataset video data to prevent loading at runtime",
+    )
+    parse.add_argument(
+        "--fp16",
+        type=lambda x: bool(strtobool(x)),
+        default=False,
+        help="Whether or not to use half precision floats where possible",
+    )
+    parse.add_argument(
+        "--use-vae",
+        type=lambda x: bool(strtobool(x)),
+        default=True,
+        help="Whether or not to use the VAE latents for diffusion",
     )
     parse.add_argument(
         "--data-dir",
@@ -310,27 +340,39 @@ if __name__ == "__main__":
     )
     parse.add_argument(
         "--train-vae",
-        type=bool,
+        type=lambda x: bool(strtobool(x)),
         help="Should train the VAE",
-        default=False,
-    )
-    parse.add_argument(
-        "--train-dit",
-        type=bool,
-        help="Should train the diffusion transformer",
         default=False,
     )
     parse.add_argument(
         "--vae-ckpt",
         type=str,
         help="Path to VAE ckpt for DiT training",
-        default="logs/vae/ckpt/model_4999.pt"
+        default=None
+    )
+    parse.add_argument(
+        "--vae-exp-name",
+        type=str,
+        help="Name of the vae experiment",
+        default="vae"
+    )
+    parse.add_argument(
+        "--train-dit",
+        type=lambda x: bool(strtobool(x)),
+        help="Should train the diffusion transformer",
+        default=False,
     )
     parse.add_argument(
         "--dit-ckpt",
         type=str,
         help="Path to DiT ckpt for resuming DiT training",
         default=None
+    )
+    parse.add_argument(
+        "--dit-exp-name",
+        type=str,
+        help="Name of the dit experiment",
+        default="dit"
     )
 
     args = parse.parse_args()

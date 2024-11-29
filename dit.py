@@ -211,6 +211,8 @@ class DiT(nn.Module):
         max_frames=32,
     ):
         super().__init__()
+        self.input_h = input_h
+        self.input_w = input_w
         self.in_channels = in_channels
         self.out_channels = in_channels
         self.patch_size = patch_size
@@ -322,7 +324,6 @@ class DiT(nn.Module):
 
 def DiT_S_2(**kwargs):
     return DiT(
-        patch_size=2,
         hidden_size=1024,
         depth=16,
         num_heads=16,
@@ -331,7 +332,6 @@ def DiT_S_2(**kwargs):
 
 def DiT_S_2_Small(**kwargs):
     return DiT(
-        patch_size=2,
         hidden_size=768,
         depth=14,
         num_heads=14,

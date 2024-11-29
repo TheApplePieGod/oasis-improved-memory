@@ -8,6 +8,7 @@ from dit import DiT_models
 from vae import VAE_models
 from torchvision.io import read_video, write_video
 from utils import load_models, load_prompt, load_actions, sigmoid_beta_schedule, get_dataloader
+from distutils.util import strtobool
 from tqdm import tqdm
 from einops import rearrange
 from torch import autocast
@@ -21,9 +22,10 @@ def main(args):
     torch.cuda.manual_seed(0)
     torch.mps.manual_seed(0)
 
-    model, vae = load_models(args.oasis_ckpt, args.vae_ckpt, (0, 0))
+    model, vae = load_models(args.oasis_ckpt, args.vae_ckpt, (0, 0), not args.use_vae)
     model = model.eval()
-    vae = vae.eval()
+    if vae:
+        vae = vae.eval()
 
     # sampling params
     n_prompt_frames = args.n_prompt_frames
@@ -34,6 +36,11 @@ def main(args):
     noise_clip = 20
     stabilization_level = 15
 
+    if args.use_vae:
+        img_size = (vae.input_width, vae.input_height)
+    else:
+        img_size = (model.input_w, model.input_h)
+
     # get prompt image/video
     load_fixed_datapoint = False
     if load_fixed_datapoint:
@@ -41,7 +48,7 @@ def main(args):
             args.prompt_path,
             video_offset=args.video_offset,
             n_prompt_frames=n_prompt_frames,
-            size=(vae.input_width, vae.input_height)
+            size=img_size
         )
         x = x * 2 - 1
         # get input action stream
@@ -50,8 +57,8 @@ def main(args):
         loader = get_dataloader(
             1, 1,
             data_dir=args.data_dir,
-            image_size=(vae.input_width, vae.input_height),
-            max_seq_len=total_frames,
+            image_size=img_size,
+            max_seq_len=total_frames
             #max_datapoints=1
         )
         x, actions = loader.dataset[0]
@@ -64,13 +71,14 @@ def main(args):
 
     # vae encoding
     B, T = x.shape[:2]
-    H, W = x.shape[-2:]
-    scaling_factor = 1.01398
-    x = rearrange(x, "b t c h w -> (b t) c h w")
-    with torch.no_grad():
-        with autocast(default_device, dtype=torch.half):
-            x = vae.encode(x).mean * scaling_factor
-    x = rearrange(x, "(b t) (h w) c -> b t c h w", t=T, h=vae.seq_h, w=vae.seq_w)
+    if args.use_vae:
+        scaling_factor = 1.01398
+        x = rearrange(x, "b t c h w -> (b t) c h w")
+        with torch.no_grad():
+            with autocast(default_device, dtype=torch.half):
+                x = vae.encode(x).mean * scaling_factor
+        x = rearrange(x, "(b t) (h w) c -> b t c h w", t=T, h=vae.seq_h, w=vae.seq_w)
+
     x = x[:, :n_prompt_frames]
 
     # get alphas
@@ -117,11 +125,15 @@ def main(args):
             x_pred = alpha_next.sqrt() * x_start + x_noise * (1 - alpha_next).sqrt()
             x[:, -1:] = x_pred[:, -1:]
 
-    # vae decoding
-    x = rearrange(x, "b t c h w -> (b t) (h w) c").float()
-    with torch.no_grad():
-        x = (vae.decode(x / scaling_factor) + 1) / 2
-    x = rearrange(x, "(b t) c h w -> b t h w c", t=total_frames)
+    if args.use_vae:
+        # vae decoding
+        x = rearrange(x, "b t c h w -> (b t) (h w) c").float()
+        with torch.no_grad():
+            x = (vae.decode(x / scaling_factor) + 1) / 2
+        x = rearrange(x, "(b t) c h w -> b t h w c", t=total_frames)
+    else:
+        x = (x + 1) / 2
+        x = rearrange(x, "b t c h w -> b t h w c").float()
 
     # save video
     x = torch.clamp(x, 0, 1)
@@ -144,6 +156,12 @@ if __name__ == "__main__":
         type=str,
         help="Path to Oasis ViT-VAE checkpoint.",
         default="vit-l-20.safetensors",
+    )
+    parse.add_argument(
+        "--use-vae",
+        type=lambda x: bool(strtobool(x)),
+        help="Whether or not to use the VAE latents for diffusion",
+        default=True,
     )
     parse.add_argument(
         "--num-frames",
