@@ -67,8 +67,8 @@ class OasisDataset(Dataset):
                 return
 
             # Could be a better heuristic but exclude shorter videos 
-            if frame_count < 256:
-                return
+            #if frame_count < 256:
+            #    return
 
             json_data = None
             if self.preload_json:
@@ -103,6 +103,9 @@ class OasisDataset(Dataset):
                 if loaded is not None:
                     self.datapoints.append(loaded)
 
+        # Sort for index determinism
+        self.datapoints.sort(key=lambda x: x["id"])
+
         if max_datapoints is not None:
             assert max_datapoints > 0
             self.datapoints = self.datapoints[:max_datapoints]
@@ -114,11 +117,15 @@ class OasisDataset(Dataset):
             return [process_json_action(msgspec.json.decode(l)) for l in f]
 
     def process_frame(self, frame):
-        return frame.to_ndarray(
+        frame = frame.to_ndarray(
             width=self.image_size[0],
             height=self.image_size[1],
             format="rgb24"
         )
+        frame = torch.from_numpy(frame)
+        frame = frame.float() / 255.0  # Normalize to [0, 1]
+        frame = frame * 2.0 - 1.0  # Normalize to [-1, 1]
+        return frame
 
     def __getitem__(self, idx):
         # T C H W
@@ -199,11 +206,8 @@ class OasisDataset(Dataset):
 
         actions = one_hot_actions(actions)
         actions = torch.cat([torch.zeros_like(actions[:1]), actions], dim=0) # prepend null action
-        frames = np.stack(frames)
-        frames = torch.from_numpy(frames)
+        frames = torch.stack(frames)
         frames = rearrange(frames, "t h w c -> t c h w")
-        frames = frames.float() / 255.0  # Normalize to [0, 1]
-        frames = frames * 2.0 - 1.0  # Normalize to [-1, 1]
         return frames, actions
 
     def __len__(self):

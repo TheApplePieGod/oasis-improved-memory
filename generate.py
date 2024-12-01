@@ -8,7 +8,9 @@ from dit import DiT_models
 from vae import VAE_models
 from torchvision.io import read_video, write_video
 from utils import load_models, load_prompt, load_actions, sigmoid_beta_schedule, get_dataloader
+from actions import get_cam_from_onehot
 from distutils.util import strtobool
+from datetime import datetime
 from tqdm import tqdm
 from einops import rearrange
 from torch import autocast
@@ -18,9 +20,12 @@ from config import default_device
 import os
 
 def main(args):
-    torch.manual_seed(0)
-    torch.cuda.manual_seed(0)
-    torch.mps.manual_seed(0)
+    seed = int(round(datetime.now().timestamp())) if args.seed is None else args.seed
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.mps.manual_seed(seed)
+
+    print(f"Generating with seed {seed}")
 
     model, vae = load_models(args.oasis_ckpt, args.vae_ckpt, (0, 0), not args.use_vae)
     model = model.eval()
@@ -33,7 +38,7 @@ def main(args):
     max_noise_level = 1000
     ddim_noise_steps = args.ddim_steps
     noise_range = torch.linspace(-1, max_noise_level - 1, ddim_noise_steps + 1)
-    noise_clip = 20
+    noise_clip = 6
     stabilization_level = 15
 
     if args.use_vae:
@@ -58,16 +63,19 @@ def main(args):
             1, 1,
             data_dir=args.data_dir,
             image_size=img_size,
-            max_seq_len=total_frames
-            #max_datapoints=1
+            max_seq_len=9999999,
+            max_datapoints=2
         )
-        x, actions = loader.dataset[0]
+        x, actions = loader.dataset[1]
         x = x.unsqueeze(0)
         actions = actions.unsqueeze(0)
 
     # sampling inputs
     x = x.to(default_device)
     actions = actions.to(default_device)
+
+    #x = x[:, 80:]
+    #actions = actions[:, 80:]
 
     # vae encoding
     B, T = x.shape[:2]
@@ -79,6 +87,9 @@ def main(args):
         x = rearrange(x, "(b t) (h w) c -> b t c h w", t=T, h=vae.seq_h, w=vae.seq_w)
 
     x = x[:, :n_prompt_frames]
+
+    # clip total frames
+    total_frames = min(total_frames, actions.shape[1])
 
     # get alphas
     betas = sigmoid_beta_schedule(max_noise_level).float().to(default_device)
@@ -161,6 +172,12 @@ if __name__ == "__main__":
         type=lambda x: bool(strtobool(x)),
         help="Whether or not to use the VAE latents for diffusion",
         default=True,
+    )
+    parse.add_argument(
+        "--seed",
+        type=int,
+        help="Seed to use for generation. Default random",
+        default=None,
     )
     parse.add_argument(
         "--num-frames",

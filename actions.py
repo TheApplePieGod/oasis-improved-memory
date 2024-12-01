@@ -148,9 +148,7 @@ def one_hot_actions(actions: Sequence[Mapping[str, int]]) -> torch.Tensor:
                 else:
                     raise ValueError(f"Unknown camera action key: {action_key}")
                 max_val = 20
-                bin_size = 0.5
-                num_buckets = int(max_val / bin_size)
-                value = (value - num_buckets) / num_buckets
+                value = value / max_val
                 value = min(max(value, -1), 1)
                 assert -1 - 1e-3 <= value <= 1 + 1e-3, f"Camera action value must be in [-1, 1], got {value}"
             else:
@@ -159,3 +157,12 @@ def one_hot_actions(actions: Sequence[Mapping[str, int]]) -> torch.Tensor:
             actions_one_hot[i, j] = value
 
     return actions_one_hot
+
+
+def get_cam_from_onehot(vec: torch.Tensor):
+    for j, action_key in enumerate(ACTION_KEYS):
+        if action_key == "cameraX":
+            cam_x = vec[j]
+        elif action_key == "cameraY":
+            cam_y = vec[j]
+    return (cam_x, cam_y)

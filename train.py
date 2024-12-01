@@ -130,8 +130,8 @@ def train_dit(args):
     alphas = 1.0 - betas
     alphas_cumprod = torch.cumprod(alphas, dim=0)
     alphas_cumprod = rearrange(alphas_cumprod, "T -> T 1 1 1")
-    cum_snr_decay = 0.98
-    noise_clip = 20.0
+    cum_snr_decay = 0.96
+    noise_clip = 6.0
     snr_clip = 5.0
     snr_arr = alphas_cumprod / (1 - alphas_cumprod)
     clipped_snr_arr = snr_arr.clamp(max=snr_clip)
@@ -140,8 +140,8 @@ def train_dit(args):
         alphabar_t = alphas_cumprod[t]
         return torch.sqrt(alphabar_t) * x_0 + torch.sqrt(1 - alphabar_t) * e
 
-    # TODO: good LR / optimizer
     optimizer = optim.AdamW(model.parameters(), lr=1e-4)
+    #optimizer = optim.AdamW(model.parameters(), lr=8e-5, weight_decay=2e-3, betas=[0.9, 0.99])
 
     train_loader = get_dataloader(
         args.batch,
