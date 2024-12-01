@@ -54,7 +54,7 @@ def compute_scaling_factor(model, args):
         4, 1,
         data_dir=args.data_dir,
         image_size=(model.input_width, model.input_height),
-        max_seq_len=1,
+        max_seq_len=200,
         load_actions=False,
         #max_datapoints=100
     )
@@ -77,15 +77,15 @@ def main(args):
     torch.mps.manual_seed(0)
 
     # Test
-    _, vae = load_models(None, f"logs/vae/ckpt/{args.vae_ckpt}", (0, 0))
+    _, vae = load_models(None, args.vae_ckpt, (0, 0))
 
     # Baseline
     #_, vae = load_models(None, f"./vit-l-20.safetensors", (0, 0))
 
     vae = vae.eval()
 
-    #plot_latents(vae, args)
-    compute_scaling_factor(vae, args)
+    plot_latents(vae, args)
+    #compute_scaling_factor(vae, args)
 
 
 if __name__ == "__main__":
