@@ -184,6 +184,7 @@ class DiT(nn.Module):
         self.patch_size = patch_size
         self.num_heads = num_heads
         self.max_frames = max_frames
+        self.name = name
 
         self.x_embedder = PatchEmbed(input_h, input_w, patch_size, in_channels, hidden_size, flatten=False)
         self.t_embedder = TimestepEmbedder(hidden_size)
@@ -320,16 +321,10 @@ class DiT_Memory(DiT):
         Forward pass of DiT with memory. 
         x: (B, T, C, H, W) tensor of spatial inputs (images or latent representations of images)
         t: (B, T,) tensor of diffusion timesteps
-        m: [(T, D)] * B array of memory embedding tensors
+        m: [Snapshot] * T array of memory snapshots
         """
-        assert len(m) <= self.max_memory_seq_len
+        m = self.mem_embedder(m, x, self.frame_seq_len)
 
-        # Extract last frame_seq_len frames as context
-        ctx_frames = x[:, -self.frame_seq_len:]
-
-        m = self.mem_embedder(m, ctx_frames)
-
-        print(m.shape, external_cond.shape)
         if external_cond is not None:
             external_cond = torch.cat([external_cond, m], dim=-1)
         else:

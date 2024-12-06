@@ -195,8 +195,17 @@ def train_dit(args):
                 memory_bank.clear()
                 #mem_embeddings = memory_embedder(X_pre_vae)
                 mem_embeddings = memory_embedder(X)
+                m = []
                 for s in range(T):
                     memory_bank.push(mem_embeddings[:, s])
+                    if s >= T // 2:
+                        m.append(memory_bank.get_snapshot())
+
+                # Update T to only use the second half of the sequence, since we used
+                # the first half just to populate the memory bank
+                T = T // 2
+                X = X[:, T:]
+                A = A[:, T:]
 
             # Sample a batch of times for training
             t = torch.randint(0, max_timesteps, (B, T), dtype=torch.long, device=default_device)
@@ -207,7 +216,6 @@ def train_dit(args):
             x_t = forward_sample(X, t, e)
             with autocast(default_device, dtype=torch.half, enabled=args.fp16):
                 if args.use_memory:
-                    m = memory_bank.to_tensor()
                     e_pred = model(x_t, t, m, A)
                 else:
                     e_pred = model(x_t, t, A)

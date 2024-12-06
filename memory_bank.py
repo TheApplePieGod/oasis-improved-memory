@@ -4,6 +4,36 @@ import torch
 import torch.nn as nn
 from collections import deque, abc
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
+
+
+def pad_sequences(seqs: list[torch.tensor], min_seq_len=0):
+    """
+    Pad a list of tensors to be grouped in a batch.
+    Returns the padded tensor and the mask tensor
+    """
+    # Dim is (T, *D)
+    max_seq = max(max(x.shape[0] for x in seqs), min_seq_len)
+
+    padded_sequences = []
+    masks = []
+    for s in seqs:
+        padding_len = max_seq - s.shape[0]
+        zeros = torch.zeros((padding_len, *s.shape[1:]), device=s.device)
+        padded = torch.cat([zeros, s], dim=0)
+        zeros = torch.zeros(padding_len, device=s.device)
+        ones = torch.ones(s.shape[0], device=s.device)
+        mask = torch.cat([zeros, ones])
+        padded_sequences.append(padded)
+        masks.append(mask)
+
+    return (torch.stack(padded_sequences), torch.stack(masks))
+
+
+@dataclass
+class MemorySnapshot:
+    memory: torch.tensor # B C D
+    mask: torch.tensor # B C
 
 
 class ReplacementPolicy(ABC):
@@ -120,9 +150,12 @@ class MemoryBank(object):
         for m in self.memory:
             m.clear()
 
-    def to_tensor(self: Self):
+    def get_snapshot(self: Self) -> MemorySnapshot:
         """
-        Returns a tensor containing the memory bank's contents.
-        [T D] * B
+        Returns a snapshot containing the memory bank's contents.
         """
-        return [torch.stack(list(m)) for m in self.memory]
+        seqs, masks = pad_sequences(
+            [torch.stack(list(m)) for m in self.memory],
+            min_seq_len=self.capacity
+        )
+        return MemorySnapshot(memory=seqs, mask=masks)

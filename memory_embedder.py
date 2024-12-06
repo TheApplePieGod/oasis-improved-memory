@@ -7,30 +7,8 @@ from attention import SpatialAxialAttention, TemporalAxialAttention
 from timm.models.vision_transformer import Mlp
 from timm.layers.helpers import to_2tuple
 from dit import PatchEmbed
+from memory_bank import MemorySnapshot, pad_sequences
 import math
-
-
-def pad_sequences(seqs: list[torch.tensor], min_seq_len=0):
-    """
-    Pad a list of tensors to be grouped in a batch.
-    Returns the padded tensor and the mask tensor
-    """
-    # Dim is (T, *D)
-    max_seq = max(max(x.shape[0] for x in seqs), min_seq_len)
-
-    padded_sequences = []
-    masks = []
-    for s in seqs:
-        padding_len = max_seq - s.shape[0]
-        zeros = torch.zeros((padding_len, *s.shape[1:]), device=s.device)
-        padded = torch.cat([zeros, s], dim=0)
-        zeros = torch.zeros(padding_len, device=s.device)
-        ones = torch.ones(s.shape[0], device=s.device)
-        mask = torch.cat([zeros, ones])
-        padded_sequences.append(padded)
-        masks.append(mask)
-
-    return (torch.stack(padded_sequences), torch.stack(masks))
 
 
 class LinearEmbedder(nn.Module):
@@ -106,11 +84,11 @@ class FMT(nn.Module):
         return f
 
     def forward(self, m: torch.tensor, f: Optional[torch.tensor]):
-        # m: B T1 C
+        # m: B C D
         # f: B T2 C H W
-        m = self.memory_embed(m) # -> B T1 D
+        m = self.memory_embed(m) # -> B C D
         if f is not None:
-            f = self.frame_embed(f) # -> B T1 D
+            f = self.frame_embed(f) # -> B T2 D
             return torch.cat([m, f], dim=1)
         return m
 
@@ -141,6 +119,10 @@ class MiT(nn.Module):
             memory_dim=input_dim
         )
 
+        self.linear = None
+        if token_dim != output_dim:
+            self.linear = nn.Linear(token_dim, output_dim)
+
         self.encoders = nn.ModuleList([
             nn.TransformerEncoderLayer(
                 d_model=token_dim,
@@ -151,31 +133,44 @@ class MiT(nn.Module):
             for _ in range(enc_depth)
         ])
 
-    def forward(self, m: list[torch.tensor], f: Optional[torch.tensor]):
-        # m: [T1 C] * B
+    def forward(self, m: list[MemorySnapshot], f: Optional[torch.tensor], frame_seq_len: Optional[int]):
+        # m: [Snapshot] * T
         # f: B T2 C H W
 
-        B = len(m)
-        if f is not None:
-            assert B == f.shape[0]
+        tokens = []
+        masks = []
+        for i, s in enumerate(reversed(m)):
+            frame_ctx = f[:, -frame_seq_len-i:max(f.shape[1]-i, 0)]
 
-        # Pad memory input since the length may vary for each elem
-        # in the batch. We do not do this for f because we assume
-        # f will always have a maximal amount of elements
-        m, mask = pad_sequences(m)
+            # Add 0s for missing frame context
+            padding_len = frame_seq_len - frame_ctx.shape[1]
+            zeros = torch.zeros((frame_ctx.shape[0], padding_len, *frame_ctx.shape[2:]), device=frame_ctx.device)
+            frame_ctx_padded = torch.cat([zeros, frame_ctx], dim=1)
 
-        out = self.fmt(m, f) # -> B T1+T2 D
+            tok = self.fmt(s.memory, frame_ctx_padded) # -> B T1+T2 D
+            tokens.append(tok)
 
-        # Add 1s for the frame portion of the mask
-        ones = torch.ones(B, out.shape[1] - m.shape[1], device=mask.device)
-        mask = torch.cat([mask, ones], dim=1)
+            # Add 1s for the frame portion of the mask and zeros for the padded part of the frame ctx
+            tok_per_frame = (tok.shape[1] - s.memory.shape[1]) // frame_seq_len
+            zeros = torch.zeros((f.shape[0], padding_len * tok_per_frame), device=tok.device)
+            ones = torch.ones((f.shape[0], frame_ctx.shape[1] * tok_per_frame), device=tok.device)
+            mask = torch.cat([s.mask, zeros, ones], dim=1)
+            masks.append(mask)
+
+        tokens = torch.vstack(tokens)
+        masks = torch.vstack(masks)
 
         for enc in self.encoders:
-            out = enc(out, src_key_padding_mask=mask)
-        out = torch.nn.functional.normalize(out, p=2, dim=1)
-        out = out[:, -1]
+            tokens = enc(tokens, src_key_padding_mask=masks)
 
-        return out
+        tokens = rearrange(tokens, "(b t) c d -> b t c d", t=len(m))
+        tokens = tokens[:, :, -1]
+        tokens = torch.nn.functional.normalize(tokens, p=2, dim=-1)
+
+        if self.linear is not None:
+            tokens = self.linear(tokens)
+
+        return tokens
 
 
 def MiT_Small(**kwargs):
