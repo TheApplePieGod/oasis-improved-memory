@@ -3,10 +3,11 @@ import numpy as np
 import torch
 import torch.nn as nn
 from collections import deque, abc
-from collections import abc
+from abc import ABC, abstractmethod
 
 
-class ReplacementPolicy(abc):
+class ReplacementPolicy(ABC):
+    @abstractmethod
     def __call__(self: Self, candidate: torch.Tensor, comparator: nn.Module):
         raise NotImplementedError
 
@@ -58,7 +59,7 @@ REPLACEMENT_CONFIG = {
     "random": RandomReplace(retention_prob=SELECTIVITY),
     "always_replace": AlwaysReplace(),
     "delta_replace": DeltaReplace(
-        delta_threshold=SELECTIVITY, delta_fn=nn.CosineSimilarity
+        delta_threshold=SELECTIVITY, delta_fn=nn.CosineSimilarity(dim=-1)
     ),
 }
 
@@ -76,39 +77,52 @@ class MemoryBank(object):
     def __init__(
         self: Self,
         embedding_dim: int,
+        batch_size: int = 1,
         capacity: int = MEMORY_CONFIG["capacity"],
         replacement_policy: ReplacementPolicy = MEMORY_CONFIG["replacement_policy"],
     ):
+        self.batch_size = batch_size
         self.capacity = capacity
         self.embedding_dim = embedding_dim
         self.replacement_policy = replacement_policy
-        self.memory = deque([], maxlen=capacity)
+        self.memory = [
+            deque([], maxlen=capacity)
+            for _ in range(batch_size)
+        ]
 
-    def __len__(self: Self):
-        return len(self.memory)
+    def __len__(self: Self, batch_idx: int = 0):
+        return len(self.memory[batch_idx])
 
-    def push(self: Self, candidate: torch.Tensor):
+    def push(self: Self, candidates: torch.Tensor):
         """
         Attempts to push the candidate into the memory bank. If the memory bank is not full,
         the candidate is appended to the memory. If the memory bank is full, the candidate is
         compared against the newest element in the memory bank. If the replacement policy
         allows the candidate to replace the last element, the candidate is appended to the
         memory bank and the oldest element is removed.
+
+        candidates: (B D)
         """
-        if len(self) < self.capacity:
-            self.memory.append(candidate)
-            return True
-        elif self.replacement_policy(candidate, self.memory[-1]):
-            self.memory.popleft()
-            self.memory.append(candidate)
-            return True
-        return False
+        successes = [False] * self.batch_size
+        for i in range(self.batch_size):
+            bank = self.memory[i]
+            candidate = candidates[i]
+            if len(self) < self.capacity:
+                bank.append(candidate)
+                successes[i] = True
+            elif self.replacement_policy(candidate, bank[-1]):
+                bank.popleft()
+                bank.append(candidate)
+                successes[i] = True
+        return successes
 
     def clear(self: Self):
-        self.memory.clear()
+        for m in self.memory:
+            m.clear()
 
     def to_tensor(self: Self):
         """
         Returns a tensor containing the memory bank's contents.
+        [T D] * B
         """
-        return torch.stack(list(self.memory))
+        return [torch.stack(list(m)) for m in self.memory]

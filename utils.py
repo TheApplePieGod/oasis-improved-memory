@@ -77,49 +77,58 @@ def load_actions(path, action_offset=None):
     return actions
 
 
-def load_models(dit_ckpt, vae_ckpt, default_img_size, skip_vae=False):
+def load_models(dit_ckpt, vae_ckpt, default_img_size, dit_use_mem=False):
     def load_vae(name, img_size):
         print(f"Loading VAE {name}")
         return VAE_models[name](input_width=img_size[0], input_height=img_size[1])
 
     # load VAE checkpoint
     vae = None
-    if not skip_vae:
-        if vae_ckpt is not None:
-            print(f"Loading VAE from ckpt {os.path.abspath(vae_ckpt)}...")
-            if vae_ckpt.endswith(".pt"):
-                # Load size info from the checkpoint
-                vae_ckpt = torch.load(vae_ckpt)
-                if "model" in vae_ckpt:
-                    model_name = vae_ckpt["model"]
-                else:
-                    model_name = "vit-l-20-shallow-encoder"
-                vae = load_vae(model_name, (vae_ckpt["input_width"], vae_ckpt["input_height"]))
-                vae.load_state_dict(vae_ckpt["vae_state_dict"])
-            elif vae_ckpt.endswith(".safetensors"):
-                # Size for oasis pretrained weights
-                vae = load_vae("vit-l-20-shallow-encoder", (640, 320))
-                load_model(vae, vae_ckpt)
+    if vae_ckpt is not None:
+        print(f"Loading VAE from ckpt {os.path.abspath(vae_ckpt)}...")
+        if vae_ckpt.endswith(".pt"):
+            # Load size info from the checkpoint
+            vae_ckpt = torch.load(vae_ckpt)
+            if "model" in vae_ckpt:
+                model_name = vae_ckpt["model"]
+            else:
+                model_name = "vit-l-20-shallow-encoder"
+            vae = load_vae(model_name, (vae_ckpt["input_width"], vae_ckpt["input_height"]))
+            vae.load_state_dict(vae_ckpt["vae_state_dict"])
+        elif vae_ckpt.endswith(".safetensors"):
+            # Size for oasis pretrained weights
+            vae = load_vae("vit-l-20-shallow-encoder", (640, 320))
+            load_model(vae, vae_ckpt)
 
-        if vae is None:
-            # Populate size with defaults specified
-            vae = load_vae("vit-l-small", default_img_size)
+    if vae is None:
+        # Populate size with defaults specified
+        vae = load_vae("vit-l-small", default_img_size)
 
-        vae = vae.to(default_device)
+    vae = vae.to(default_device)
 
-        print(f"VAE has input dim {vae.input_width}x{vae.input_height}")
+    print(f"VAE has input dim {vae.input_width}x{vae.input_height}")
 
     # ------------
 
     def load_dit(name, ckpt=None):
         print(f"Loading DiT {name}")
-        if skip_vae:
-            width = ckpt["input_width"] if ckpt is not None and "input_width" in ckpt else default_img_size[0]
-            height = ckpt["input_height"] if ckpt is not None and "input_height" in ckpt else default_img_size[1]
-            patch_size = ckpt["patch_size"] if ckpt is not None and "patch_size" in ckpt else 16
-            return DiT_models[name](input_w=width, input_h=height, in_channels=3, patch_size=patch_size)
+        if dit_use_mem:
+            return DiT_models[name](
+                input_w=vae.seq_w,
+                input_h=vae.seq_h,
+                in_channels=vae.latent_dim,
+                patch_size=2,
+
+                # TODO: change
+                memory_input_dim=vae.seq_w * vae.seq_h * vae.latent_dim
+            )
         else:
-            return DiT_models[name](input_w=vae.seq_w, input_h=vae.seq_h, in_channels=vae.latent_dim, patch_size=2)
+            return DiT_models[name](
+                input_w=vae.seq_w,
+                input_h=vae.seq_h,
+                in_channels=vae.latent_dim,
+                patch_size=2
+            )
 
     model = None
     if dit_ckpt is not None:
@@ -137,7 +146,10 @@ def load_models(dit_ckpt, vae_ckpt, default_img_size, skip_vae=False):
             load_model(model, dit_ckpt)
 
     if model is None:
-        model = load_dit("DiT-S/2-Small")
+        if dit_use_mem:
+            model = load_dit("DiT-S/2-Small-MiT")
+        else:
+            model = load_dit("DiT-S/2-Small")
 
     model = model.to(default_device)
 

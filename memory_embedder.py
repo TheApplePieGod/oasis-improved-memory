@@ -22,8 +22,11 @@ def pad_sequences(seqs: list[torch.tensor], min_seq_len=0):
     masks = []
     for s in seqs:
         padding_len = max_seq - s.shape[0]
-        padded = torch.cat([torch.zeros((padding_len, *s.shape[1:])), s], dim=0)
-        mask = torch.cat([torch.zeros(padding_len), torch.ones(s.shape[0])])
+        zeros = torch.zeros((padding_len, *s.shape[1:]), device=s.device)
+        padded = torch.cat([zeros, s], dim=0)
+        zeros = torch.zeros(padding_len, device=s.device)
+        ones = torch.ones(s.shape[0], device=s.device)
+        mask = torch.cat([zeros, ones])
         padded_sequences.append(padded)
         masks.append(mask)
 
@@ -148,13 +151,13 @@ class MiT(nn.Module):
             for _ in range(enc_depth)
         ])
 
-    def forward(self, m: torch.tensor, f: Optional[torch.tensor]):
+    def forward(self, m: list[torch.tensor], f: Optional[torch.tensor]):
         # m: [T1 C] * B
         # f: B T2 C H W
 
         B = len(m)
         if f is not None:
-            assert B == len(m)
+            assert B == f.shape[0]
 
         # Pad memory input since the length may vary for each elem
         # in the batch. We do not do this for f because we assume
@@ -164,7 +167,8 @@ class MiT(nn.Module):
         out = self.fmt(m, f) # -> B T1+T2 D
 
         # Add 1s for the frame portion of the mask
-        mask = torch.cat([mask, torch.ones(B, out.shape[1] - m.shape[1])], dim=1)
+        ones = torch.ones(B, out.shape[1] - m.shape[1], device=mask.device)
+        mask = torch.cat([mask, ones], dim=1)
 
         for enc in self.encoders:
             out = enc(out, src_key_padding_mask=mask)

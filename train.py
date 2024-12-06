@@ -12,6 +12,7 @@ from pprint import pprint
 from config import default_device
 from torch.utils.tensorboard import SummaryWriter
 from diffusers.optimization import get_scheduler
+from memory_bank import MemoryBank
 import lpips
 import time
 import os
@@ -112,7 +113,12 @@ def train_vae(args):
 
 
 def train_dit(args):
-    model, vae = load_models(args.dit_ckpt, args.vae_ckpt, parse_img_size(args.default_img_size), not args.use_vae)
+    model, vae = load_models(
+        args.dit_ckpt,
+        args.vae_ckpt,
+        default_img_size=parse_img_size(args.default_img_size),
+        dit_use_mem=args.use_memory
+    )
     model = model.train()
     model.requires_grad_(True)
     if vae:
@@ -124,6 +130,9 @@ def train_dit(args):
     # params
     max_timesteps = 1000
     n_prompt_frames = model.max_frames
+    if args.use_memory:
+        # Double the sequence length so we can prepopulate the mem bank
+        n_prompt_frames *= 2
 
     # get alphas
     betas = sigmoid_beta_schedule(max_timesteps).float().to(default_device)
@@ -154,7 +163,12 @@ def train_dit(args):
         #max_datapoints=100
     )
 
+    # TODO: move
+    memory_dim = 64
+    memory_embedder = lambda x: torch.flatten(x, start_dim=2)
+
     writer = SummaryWriter(f"logs/{args.dit_exp_name}/summary")
+    memory_bank = MemoryBank(memory_dim, batch_size=args.batch)
     for epoch in range(args.epochs):
         avg_train_loss = 0
         train_steps = 0
@@ -168,18 +182,23 @@ def train_dit(args):
             A = A.to(default_device)
 
             B, T = X.shape[:2]
-            
-            if args.use_vae:
-                X = rearrange(X, "b t c h w -> (b t) c h w")
-                with torch.no_grad():
-                    with autocast(default_device, dtype=torch.half):
-                        X = vae.encode(X).sample() * args.vae_scale
-                X = rearrange(X, "(b t) (h w) c -> b t c h w", t=T, h=vae.seq_h, w=vae.seq_w)
+
+            X_pre_vae = X
+            X = rearrange(X, "b t c h w -> (b t) c h w")
+            with torch.no_grad():
+                with autocast(default_device, dtype=torch.half):
+                    X = vae.encode(X).sample() * args.vae_scale
+            X = rearrange(X, "(b t) (h w) c -> b t c h w", t=T, h=vae.seq_h, w=vae.seq_w)
+
+            if args.use_memory:
+                # Populate memory bank
+                memory_bank.clear()
+                #mem_embeddings = memory_embedder(X_pre_vae)
+                mem_embeddings = memory_embedder(X)
+                for s in range(T):
+                    memory_bank.push(mem_embeddings[:, s])
 
             # Sample a batch of times for training
-            #t_ctx = torch.full((B, T - 1), 0, dtype=torch.long, device=default_device)
-            #t = torch.randint(0, max_timesteps, (B, 1), dtype=torch.long, device=default_device)
-            #t = torch.cat([t_ctx, t], dim=1)
             t = torch.randint(0, max_timesteps, (B, T), dtype=torch.long, device=default_device)
 
             # Calculate the loss
@@ -187,7 +206,11 @@ def train_dit(args):
             e = torch.clamp(e, -noise_clip, noise_clip)
             x_t = forward_sample(X, t, e)
             with autocast(default_device, dtype=torch.half, enabled=args.fp16):
-                e_pred = model(x_t, t, A)
+                if args.use_memory:
+                    m = memory_bank.to_tensor()
+                    e_pred = model(x_t, t, m, A)
+                else:
+                    e_pred = model(x_t, t, A)
             e_pred = torch.clamp(e_pred, -noise_clip, noise_clip)
             loss = torch.nn.functional.mse_loss(e, e_pred.float(), reduction="none")
 
@@ -242,7 +265,7 @@ def train_dit(args):
                     "input_width": model.input_w,
                     "input_height": model.input_h,
                     "patch_size": model.patch_size,
-                    "model": "DiT-S/2-Small"
+                    "model": model.name
                 },
                 f"logs/{args.dit_exp_name}/ckpt",
                 f"model_{epoch}.pt"
@@ -334,10 +357,10 @@ if __name__ == "__main__":
         help="Whether or not to use half precision floats where possible",
     )
     parse.add_argument(
-        "--use-vae",
+        "--use-memory",
         type=lambda x: bool(strtobool(x)),
         default=True,
-        help="Whether or not to use the VAE latents for diffusion",
+        help="Whether or not to use the memory bank for diffusion",
     )
     parse.add_argument(
         "--data-dir",
