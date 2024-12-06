@@ -305,8 +305,10 @@ class DiT_Memory(DiT):
 
         super().__init__(external_cond_dim=external_cond_dim, **kwargs)
 
+        self.memory_input_dim = memory_input_dim
         self.max_memory_seq_len = max_memory_seq_len
         self.frame_seq_len = frame_seq_len
+
         self.mem_embedder = memory_embedding_models[mem_embed_name](
             input_dim=memory_input_dim,
             input_seq_len=max_memory_seq_len,

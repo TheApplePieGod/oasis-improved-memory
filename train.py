@@ -163,12 +163,11 @@ def train_dit(args):
         #max_datapoints=100
     )
 
-    # TODO: move
-    memory_dim = 64
-    memory_embedder = lambda x: torch.flatten(x, start_dim=2)
+    if args.use_memory:
+        memory_embedder = lambda x: torch.flatten(x, start_dim=2)
+        memory_bank = MemoryBank(model.memory_input_dim, batch_size=args.batch)
 
     writer = SummaryWriter(f"logs/{args.dit_exp_name}/summary")
-    memory_bank = MemoryBank(memory_dim, batch_size=args.batch)
     for epoch in range(args.epochs):
         avg_train_loss = 0
         train_steps = 0

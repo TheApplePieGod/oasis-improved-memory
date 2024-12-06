@@ -133,6 +133,8 @@ class MemoryBank(object):
 
         candidates: (B D)
         """
+        assert candidates.shape[1] == self.embedding_dim
+
         successes = [False] * self.batch_size
         for i in range(self.batch_size):
             bank = self.memory[i]
