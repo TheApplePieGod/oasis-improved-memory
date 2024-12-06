@@ -104,6 +104,9 @@ class MemoryBank(object):
             return True
         return False
 
+    def clear(self: Self):
+        self.memory.clear()
+
     def to_tensor(self: Self):
         """
         Returns a tensor containing the memory bank's contents.
