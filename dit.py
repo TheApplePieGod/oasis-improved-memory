@@ -13,6 +13,8 @@ from einops import rearrange
 from attention import SpatialAxialAttention, TemporalAxialAttention
 from timm.models.vision_transformer import Mlp
 from timm.layers.helpers import to_2tuple
+from patch_embed import PatchEmbed
+from memory_embedder import memory_embedding_models
 import math
 
 
@@ -32,43 +34,6 @@ def gate(x, g):
     while g.dim() < x.dim():
         g = g.unsqueeze(-2)
     return g * x
-
-
-class PatchEmbed(nn.Module):
-    """2D Image to Patch Embedding"""
-
-    def __init__(
-        self,
-        img_height=256,
-        img_width=256,
-        patch_size=16,
-        in_chans=3,
-        embed_dim=768,
-        norm_layer=None,
-        flatten=True,
-    ):
-        super().__init__()
-        img_size = (img_height, img_width)
-        patch_size = to_2tuple(patch_size)
-        self.img_size = img_size
-        self.patch_size = patch_size
-        self.grid_size = (img_size[0] // patch_size[0], img_size[1] // patch_size[1])
-        self.num_patches = self.grid_size[0] * self.grid_size[1]
-        self.flatten = flatten
-
-        self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=patch_size)
-        self.norm = norm_layer(embed_dim) if norm_layer else nn.Identity()
-
-    def forward(self, x, random_sample=False):
-        B, C, H, W = x.shape
-        assert random_sample or (H == self.img_size[0] and W == self.img_size[1]), f"Input image size ({H}*{W}) doesn't match model ({self.img_size[0]}*{self.img_size[1]})."
-        x = self.proj(x)
-        if self.flatten:
-            x = rearrange(x, "B C H W -> B (H W) C")
-        else:
-            x = rearrange(x, "B C H W -> B H W C")
-        x = self.norm(x)
-        return x
 
 
 class TimestepEmbedder(nn.Module):
@@ -199,6 +164,7 @@ class DiT(nn.Module):
 
     def __init__(
         self,
+        name,
         input_h=18,
         input_w=32,
         patch_size=2,
@@ -218,6 +184,7 @@ class DiT(nn.Module):
         self.patch_size = patch_size
         self.num_heads = num_heads
         self.max_frames = max_frames
+        self.name = name
 
         self.x_embedder = PatchEmbed(input_h, input_w, patch_size, in_channels, hidden_size, flatten=False)
         self.t_embedder = TimestepEmbedder(hidden_size)
@@ -322,8 +289,57 @@ class DiT(nn.Module):
         return x
 
 
+class DiT_Memory(DiT):
+    def __init__(
+        self,
+        mem_embed_name: str,  # Name of the memory embedding model to use
+        memory_input_dim: int,  # Dimension of each memory entry
+        max_memory_seq_len: int,  # Maximum number of memory entries passed to forward()
+        memory_condition_dim: int,  # Dimension of the memory condition passed to DiT
+        frame_seq_len: int,  # Number of last frames to pass to the memory embedder
+        **kwargs
+    ):
+        # Append the memory condition dim to the input condition dim
+        external_cond_dim = kwargs.pop("external_cond_dim")
+        external_cond_dim += memory_condition_dim
+
+        super().__init__(external_cond_dim=external_cond_dim, **kwargs)
+
+        self.memory_input_dim = memory_input_dim
+        self.max_memory_seq_len = max_memory_seq_len
+        self.frame_seq_len = frame_seq_len
+
+        self.mem_embedder = memory_embedding_models[mem_embed_name](
+            input_dim=memory_input_dim,
+            input_seq_len=max_memory_seq_len,
+            output_dim=memory_condition_dim,
+            frame_w=self.input_w,
+            frame_h=self.input_h,
+            frame_c=self.in_channels
+        )
+
+    def forward(self, x, t, m, external_cond=None):
+        """
+        Forward pass of DiT with memory. 
+        x: (B, T, C, H, W) tensor of spatial inputs (images or latent representations of images)
+        t: (B, T,) tensor of diffusion timesteps
+        m: [Snapshot] * T array of memory snapshots
+        """
+        m = self.mem_embedder(m, x, self.frame_seq_len)
+
+        if external_cond is not None:
+            external_cond = torch.cat([external_cond, m], dim=-1)
+        else:
+            external_cond = m
+
+        out = super().forward(x, t, external_cond)
+
+        return out
+
+
 def DiT_S_2(**kwargs):
     return DiT(
+        name="DiT-S/2",
         hidden_size=1024,
         depth=16,
         num_heads=16,
@@ -332,6 +348,7 @@ def DiT_S_2(**kwargs):
 
 def DiT_S_2_Small(**kwargs):
     return DiT(
+        name="DiT-S/2-Small",
         hidden_size=768,
         depth=14,
         num_heads=14,
@@ -341,6 +358,7 @@ def DiT_S_2_Small(**kwargs):
 
 def DiT_S_2_XS(**kwargs):
     return DiT(
+        name="DiT-S/2-XS",
         hidden_size=512,
         depth=8,
         num_heads=8,
@@ -348,4 +366,24 @@ def DiT_S_2_XS(**kwargs):
         **kwargs
     )
 
-DiT_models = {"DiT-S/2": DiT_S_2, "DiT-S/2-Small": DiT_S_2_Small, "DiT-S/2-XS": DiT_S_2_XS}
+def DiT_S_2_Small_MiT(**kwargs):
+    return DiT_Memory(
+        name="DiT-S/2-Small-MiT",
+        mem_embed_name="mit",
+        max_memory_seq_len=16,
+        memory_condition_dim=32,
+        frame_seq_len=3,
+        external_cond_dim=25,
+        hidden_size=768,
+        depth=14,
+        num_heads=14,
+        max_frames=16,
+        **kwargs
+    )
+
+DiT_models = {
+    "DiT-S/2": DiT_S_2,
+    "DiT-S/2-Small": DiT_S_2_Small,
+    "DiT-S/2-XS": DiT_S_2_XS,
+    "DiT-S/2-Small-MiT": DiT_S_2_Small_MiT,
+}

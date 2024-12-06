@@ -17,6 +17,7 @@ from torch import autocast
 import argparse
 from pprint import pprint
 from config import default_device
+from memory_bank import MemoryBank
 import os
 
 def main(args):
@@ -27,10 +28,9 @@ def main(args):
 
     print(f"Generating with seed {seed}")
 
-    model, vae = load_models(args.oasis_ckpt, args.vae_ckpt, (0, 0), not args.use_vae)
+    model, vae = load_models(args.oasis_ckpt, args.vae_ckpt, (0, 0), args.use_memory)
     model = model.eval()
-    if vae:
-        vae = vae.eval()
+    vae = vae.eval()
 
     # sampling params
     n_prompt_frames = args.n_prompt_frames
@@ -40,11 +40,7 @@ def main(args):
     noise_range = torch.linspace(-1, max_noise_level - 1, ddim_noise_steps + 1)
     noise_clip = 6
     stabilization_level = 15
-
-    if args.use_vae:
-        img_size = (vae.input_width, vae.input_height)
-    else:
-        img_size = (model.input_w, model.input_h)
+    img_size = (vae.input_width, vae.input_height)
 
     # get prompt image/video
     load_fixed_datapoint = False
@@ -66,7 +62,7 @@ def main(args):
             max_seq_len=9999999,
             max_datapoints=2
         )
-        x, actions = loader.dataset[1]
+        x, actions = loader.dataset[0]
         x = x.unsqueeze(0)
         actions = actions.unsqueeze(0)
 
@@ -79,12 +75,11 @@ def main(args):
 
     # vae encoding
     B, T = x.shape[:2]
-    if args.use_vae:
-        x = rearrange(x, "b t c h w -> (b t) c h w")
-        with torch.no_grad():
-            with autocast(default_device, dtype=torch.half):
-                x = vae.encode(x).mean * args.vae_scale
-        x = rearrange(x, "(b t) (h w) c -> b t c h w", t=T, h=vae.seq_h, w=vae.seq_w)
+    x = rearrange(x, "b t c h w -> (b t) c h w")
+    with torch.no_grad():
+        with autocast(default_device, dtype=torch.half):
+            x = vae.encode(x).mean * args.vae_scale
+    x = rearrange(x, "(b t) (h w) c -> b t c h w", t=T, h=vae.seq_h, w=vae.seq_w)
 
     x = x[:, :n_prompt_frames]
 
@@ -96,6 +91,22 @@ def main(args):
     alphas = 1.0 - betas
     alphas_cumprod = torch.cumprod(alphas, dim=0)
     alphas_cumprod = rearrange(alphas_cumprod, "T -> T 1 1 1")
+
+    if args.use_memory:
+        memory_embedder = lambda x: torch.flatten(x, start_dim=2)
+        memory_bank = MemoryBank(model.memory_input_dim, 1)
+
+        # Populate bank with prompt memory embeddings
+        m = []
+        mem_embeddings = memory_embedder(x)
+        for i, s in enumerate(range(n_prompt_frames)):
+            memory_bank.push(mem_embeddings[:, s])
+            m.append(memory_bank.get_snapshot())
+
+            # Duplicate the first snapshot since generation
+            # requires an additional condition
+            if i == 0:
+                m.append(memory_bank.get_snapshot())
 
     # sampling loop
     for i in tqdm(range(n_prompt_frames, total_frames)):
@@ -118,11 +129,15 @@ def main(args):
             x_curr = x_curr[:, start_frame:]
             t = t[:, start_frame:]
             t_next = t_next[:, start_frame:]
+            m_curr = m[start_frame:]
 
             # get model predictions
             with torch.no_grad():
                 with autocast(default_device, dtype=torch.half):
-                    v = model(x_curr, t, actions[:, start_frame : i + 1])
+                    if args.use_memory:
+                        v = model(x_curr, t, m_curr, actions[:, start_frame : i + 1])
+                    else:
+                        v = model(x_curr, t, actions[:, start_frame : i + 1])
 
             x_start = alphas_cumprod[t].sqrt() * x_curr - (1 - alphas_cumprod[t]).sqrt() * v
             x_noise = ((1 / alphas_cumprod[t]).sqrt() * x_curr - x_start) / (1 / alphas_cumprod[t] - 1).sqrt()
@@ -135,15 +150,17 @@ def main(args):
             x_pred = alpha_next.sqrt() * x_start + x_noise * (1 - alpha_next).sqrt()
             x[:, -1:] = x_pred[:, -1:]
 
-    if args.use_vae:
-        # vae decoding
-        x = rearrange(x, "b t c h w -> (b t) (h w) c").float()
-        with torch.no_grad():
-            x = (vae.decode(x / args.vae_scale) + 1) / 2
-        x = rearrange(x, "(b t) c h w -> b t h w c", t=total_frames)
-    else:
-        x = (x + 1) / 2
-        x = rearrange(x, "b t c h w -> b t h w c").float()
+        if args.use_memory:
+            # Populate bank with generated frame
+            mem_embedding = memory_embedder(x[:, -1:])
+            memory_bank.push(mem_embedding[:, -1])
+            m.append(memory_bank.get_snapshot())
+
+    # vae decoding
+    x = rearrange(x, "b t c h w -> (b t) (h w) c").float()
+    with torch.no_grad():
+        x = (vae.decode(x / args.vae_scale) + 1) / 2
+    x = rearrange(x, "(b t) c h w -> b t h w c", t=total_frames)
 
     # save video
     x = torch.clamp(x, 0, 1)
@@ -232,6 +249,12 @@ if __name__ == "__main__":
         type=float,
         required=True,
         help="Scaling factor for transforming the VAE before DiT training",
+    )
+    parse.add_argument(
+        "--use-memory",
+        type=lambda x: bool(strtobool(x)),
+        default=True,
+        help="Whether or not to use the memory bank for diffusion",
     )
     parse.add_argument("--ddim-steps", type=int, help="How many DDIM steps?", default=10)
 
