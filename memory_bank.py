@@ -83,13 +83,14 @@ class DeltaReplace(ReplacementPolicy):
         return self.delta_fn(candidate, comparator) > self.delta_threshold
 
 
-SELECTIVITY = 0.5
+SELECTIVITY = 0.2
 
 REPLACEMENT_CONFIG = {
     "random": RandomReplace(retention_prob=SELECTIVITY),
     "always_replace": AlwaysReplace(),
     "delta_replace": DeltaReplace(
-        delta_threshold=SELECTIVITY, delta_fn=nn.CosineSimilarity(dim=-1)
+        delta_threshold=SELECTIVITY,
+        delta_fn=lambda x, y: 1.0 - torch.nn.functional.cosine_similarity(x, y, dim=-1)
     ),
 }
 
