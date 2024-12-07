@@ -149,6 +149,7 @@ class AttentionBlock(nn.Module):
 class AutoencoderKL(nn.Module):
     def __init__(
         self,
+        name,
         latent_dim,
         input_height=256,
         input_width=256,
@@ -172,6 +173,7 @@ class AutoencoderKL(nn.Module):
         self.seq_w = input_width // patch_size
         self.seq_len = self.seq_h * self.seq_w
         self.patch_dim = 3 * patch_size**2
+        self.name = name
 
         self.latent_dim = latent_dim
         self.enc_dim = enc_dim
@@ -341,6 +343,7 @@ def ViT_L_20_Shallow_Encoder(**kwargs):
         latent_dim = 16
     return AutoencoderKL(
         latent_dim=latent_dim,
+        name="vit-l-20-shallow-encoder",
         patch_size=20,
         enc_dim=1024,
         enc_depth=6,
@@ -355,6 +358,7 @@ def ViT_L_Small(**kwargs):
     latent_dim = 8
     return AutoencoderKL(
         latent_dim=latent_dim,
+        name="vit-l-small",
         patch_size=8,
         enc_dim=256,
         enc_depth=4,

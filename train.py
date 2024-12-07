@@ -103,7 +103,7 @@ def train_vae(args):
                     "vae_state_dict": model.state_dict(),
                     "input_width": model.input_width,
                     "input_height": model.input_height,
-                    "model": "vit-l-small"
+                    "model": model.name
                 },
                 f"logs/{args.vae_exp_name}/ckpt",
                 f"model_{epoch}.pt"
