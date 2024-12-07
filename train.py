@@ -165,7 +165,6 @@ def train_dit(args):
 
     if args.use_memory:
         memory_embedder = lambda x: torch.flatten(x, start_dim=2)
-        memory_bank = MemoryBank(model.memory_input_dim, batch_size=args.batch)
 
     writer = SummaryWriter(f"logs/{args.dit_exp_name}/summary")
     for epoch in range(args.epochs):
@@ -191,7 +190,9 @@ def train_dit(args):
 
             if args.use_memory:
                 # Populate memory bank
-                memory_bank.clear()
+                # TODO: reuse this? doesnt really work bc batch size can vary
+                memory_bank = MemoryBank(model.memory_input_dim, batch_size=B)
+
                 #mem_embeddings = memory_embedder(X_pre_vae)
                 mem_embeddings = memory_embedder(X)
                 m = []
