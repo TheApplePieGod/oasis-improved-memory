@@ -104,8 +104,9 @@ def load_models(dit_ckpt, vae_ckpt, default_img_size, dit_use_mem=False):
         # Populate size with defaults specified
         vae = load_vae("vit-l-small", default_img_size)
 
-    vae = vae.to(default_device)
+        # vae = load_vae("vit-mim", (16, 16)) #for vit_mim this is downsampled image size
 
+    vae = vae.to(default_device)
     print(f"VAE has input dim {vae.input_width}x{vae.input_height}")
 
     # ------------
