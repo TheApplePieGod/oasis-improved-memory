@@ -16,6 +16,7 @@ from timm.models.vision_transformer import Mlp
 from timm.layers.helpers import to_2tuple
 from rotary_embedding_torch import RotaryEmbedding, apply_rotary_emb
 from patch_embed import PatchEmbed
+import tqdm
 
 
 class DiagonalGaussianDistribution(object):
@@ -319,7 +320,7 @@ class AutoencoderKL(nn.Module):
         else:
             z = posterior.mode()
         dec = self.decode(z)
-        return dec, posterior, z
+        return input, dec, posterior, z
 
     def get_input(self, batch, k):
         x = batch[k]
@@ -329,7 +330,7 @@ class AutoencoderKL(nn.Module):
         return x
 
     def forward(self, inputs, labels, split="train"):
-        rec, post, latent = self.autoencode(inputs)
+        _, rec, post, latent = self.autoencode(inputs)
         return rec, post, latent
 
     def get_last_layer(self):
@@ -343,7 +344,8 @@ class MiM_Encode(AutoencoderKL):
 
     def autoencode(self, input, sample_posterior=True):
         q_input = self.quantize_image(input)
-        super().autoencode(q_input, sample_posterior)
+        print("input shape", input.shape, q_input.shape)
+        return q_input, *super().autoencode(q_input, sample_posterior)[1:]
 
     def quantize_image(self, frame):
         _, _, H, W = frame.shape
@@ -390,13 +392,13 @@ def ViT_L_Small(**kwargs):
 
 def ViT_MiM(**kwargs):
     return MiM_Encode(
-        latent_dim=8,
-        quantize_steps=10,
+        latent_dim=128,
+        quantize_steps=5,
         name="vit-mim",
-        patch_size=8,
+        patch_size=64,
         enc_dim=128,
         enc_depth=4,
-        enc_heads=8,
+        enc_heads=1,
         dec_dim=128,
         dec_depth=8,
         dec_heads=8,

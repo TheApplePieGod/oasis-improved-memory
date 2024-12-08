@@ -60,7 +60,9 @@ def train_vae(args):
             X = X.squeeze(1).to(default_device)
             optimizer.zero_grad()
 
-            x_prime, dist, latent = model.autoencode(X)
+            print("original x shape ", X.shape)
+            X, x_prime, dist, latent = model.autoencode(X)
+            print(X.shape, x_prime.shape)
 
             l1 = torch.nn.functional.mse_loss(x_prime, X, reduction='sum') / X.shape[0]
             dkl = (0.5 * torch.sum(dist.mean ** 2 + dist.var - dist.logvar - 1)) / X.shape[0] * args.kl_scale
