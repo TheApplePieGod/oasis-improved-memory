@@ -74,8 +74,7 @@ def main(args):
             1, 1,
             data_dir=args.data_dir,
             image_size=img_size,
-            max_seq_len=9999999,
-            max_datapoints=2
+            max_seq_len=9999999
         )
         x, actions = loader.dataset[0]
         x = x.unsqueeze(0)
@@ -101,6 +100,12 @@ def main(args):
         with torch.no_grad():
             #mem_embeddings = mem_encoder.encode_memory(x, False)
             mem_embeddings = mem_encoder.encode_memory(x_pre_vae, False)
+
+            """
+            x2, _ = loader.dataset[6]
+            x2 = x2.unsqueeze(0).to(default_device)
+            mem_embeddings = mem_encoder.encode_memory(x2, False)
+            """
 
         m = []
         for i, s in enumerate(range(n_prompt_frames)):
@@ -166,6 +171,7 @@ def main(args):
             last_frame = rearrange(x[:, -1], "b c h w -> b (h w) c").float()
             with torch.no_grad():
                 last_frame = (vae.decode(last_frame / args.vae_scale) + 1) / 2
+                last_frame = last_frame.unsqueeze(1)
                 mem_embedding = mem_encoder.encode_memory(last_frame, False)
             memory_bank.push(mem_embedding[:, -1])
             m.append(memory_bank.get_snapshot())
