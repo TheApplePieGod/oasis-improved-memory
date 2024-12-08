@@ -175,6 +175,7 @@ class AutoencoderKL(nn.Module):
         self.seq_len = self.seq_h * self.seq_w
         self.patch_dim = 3 * patch_size**2
         self.name = name
+        self.epoch = -1
 
         self.latent_dim = latent_dim
         self.enc_dim = enc_dim

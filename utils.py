@@ -95,6 +95,7 @@ def load_models(dit_ckpt, vae_ckpt, mem_encoder_ckpt, default_img_size, dit_use_
                 model_name = "vit-l-20-shallow-encoder"
             vae = load_vae(model_name, (vae_ckpt["input_width"], vae_ckpt["input_height"]))
             vae.load_state_dict(vae_ckpt["vae_state_dict"])
+            vae.epoch = vae_ckpt["epoch"]
         elif vae_ckpt.endswith(".safetensors"):
             # Size for oasis pretrained weights
             vae = load_vae("vit-l-20-shallow-encoder", (640, 320))
@@ -118,6 +119,7 @@ def load_models(dit_ckpt, vae_ckpt, mem_encoder_ckpt, default_img_size, dit_use_
         model_name = mem_encoder_ckpt["model"]
         mem_encoder = load_vae(model_name, (mem_encoder_ckpt["input_width"], mem_encoder_ckpt["input_height"]))
         mem_encoder.load_state_dict(mem_encoder_ckpt["vae_state_dict"])
+        mem_encoder.epoch = mem_encoder_ckpt["epoch"]
 
         mem_encoder = mem_encoder.to(default_device)
         print(f"Mem encoder has input dim {mem_encoder.input_width}x{mem_encoder.input_height}")
@@ -155,13 +157,14 @@ def load_models(dit_ckpt, vae_ckpt, mem_encoder_ckpt, default_img_size, dit_use_
                 model_name = "DiT-S/2"
             model = load_dit(model_name, ckpt)
             model.load_state_dict(ckpt["dit_state_dict"], strict=False)
+            model.epoch = ckpt["epoch"]
         elif dit_ckpt.endswith(".safetensors"):
             model = load_dit("DiT-S/2")
             load_model(model, dit_ckpt)
 
     if model is None:
         if dit_use_mem:
-            model = load_dit("DiT-S/2-Small-MiT-NoFrame")
+            model = load_dit("DiT-S/2-Small-Linear")
         else:
             model = load_dit("DiT-S/2-Small")
 

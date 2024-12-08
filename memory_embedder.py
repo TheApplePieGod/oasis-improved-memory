@@ -18,6 +18,7 @@ class LinearEmbedder(nn.Module):
         input_seq_len: int,
         output_dim: int,
         # Unused
+        frame_patch_size=0,
         frame_w=0,
         frame_h=0,
         frame_c=0,
@@ -28,12 +29,17 @@ class LinearEmbedder(nn.Module):
 
         self.linear = nn.Linear(input_dim * input_seq_len, output_dim)
 
-    def forward(self, m, f):
-        # [T D] * B
-        m, _ = pad_sequences(m, min_seq_len=self.input_seq_len)
-        m = rearrange(m, "B T D -> B (T D)")
-        m = self.linear(m)
-        m = torch.nn.functional.normalize(m, p=2, dim=1)
+    def forward(self, m, f, frame_seq_len):
+        # m: [Snapshot] * T
+
+        results = []
+        for i, s in enumerate(m):
+            r = rearrange(s.memory, "B C D -> B (C D)")
+            r = self.linear(r)
+            r = torch.nn.functional.normalize(r, p=2, dim=1)
+            results.append(r)
+
+        m = rearrange(torch.stack(results), "T B D -> B T D")
         return m
 
 

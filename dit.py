@@ -185,6 +185,7 @@ class DiT(nn.Module):
         self.num_heads = num_heads
         self.max_frames = max_frames
         self.name = name
+        self.epoch = -1
 
         self.x_embedder = PatchEmbed(input_h, input_w, patch_size, in_channels, hidden_size, flatten=False)
         self.t_embedder = TimestepEmbedder(hidden_size)
@@ -367,6 +368,25 @@ def DiT_S_2_XS(**kwargs):
         **kwargs
     )
 
+def DiT_S_2_Small_Linear(**kwargs):
+    if "patch_size" in kwargs:
+        kwargs.pop("patch_size")
+
+    return DiT_Memory(
+        name="DiT-S/2-Small-Linear",
+        mem_embed_name="linear",
+        max_memory_seq_len=16,
+        memory_condition_dim=32,
+        frame_seq_len=0,
+        patch_size=1,
+        external_cond_dim=25,
+        hidden_size=768,
+        depth=14,
+        num_heads=14,
+        max_frames=16,
+        **kwargs
+    )
+
 def DiT_S_2_Small_MiT(**kwargs):
     return DiT_Memory(
         name="DiT-S/2-Small-MiT",
@@ -420,6 +440,7 @@ DiT_models = {
     "DiT-S/2": DiT_S_2,
     "DiT-S/2-Small": DiT_S_2_Small,
     "DiT-S/2-XS": DiT_S_2_XS,
+    "DiT-S/2-Small-Linear": DiT_S_2_Small_Linear,
     "DiT-S/2-Small-MiT": DiT_S_2_Small_MiT,
     "DiT-S/2-Small-MiT-MiM": DiT_S_2_Small_MiT_MiM,
     "DiT-S/2-Small-MiT-NoFrame": DiT_S_2_Small_MiT_NoFrame,

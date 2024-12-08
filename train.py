@@ -46,7 +46,7 @@ def train_vae(args):
     lpips_loss_fn = lpips.LPIPS(net="alex").to(default_device)
 
     writer = SummaryWriter(f"logs/{args.vae_exp_name}/summary")
-    for epoch in range(args.epochs):
+    for epoch in range(model.epoch + 1, args.epochs):
         avg_train_loss = 0
         avg_recon_loss = 0
         avg_kl_loss = 0
@@ -166,7 +166,7 @@ def train_dit(args):
     )
 
     writer = SummaryWriter(f"logs/{args.dit_exp_name}/summary")
-    for epoch in range(args.epochs):
+    for epoch in range(model.epoch + 1, args.epochs):
         avg_train_loss = 0
         train_steps = 0
         prev_time = time.time()
