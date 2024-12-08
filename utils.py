@@ -77,7 +77,7 @@ def load_actions(path, action_offset=None):
     return actions
 
 
-def load_models(dit_ckpt, vae_ckpt, default_img_size, dit_use_mem=False):
+def load_models(dit_ckpt, vae_ckpt, mem_encoder_ckpt, default_img_size, dit_use_mem=False):
     def load_vae(name, img_size):
         print(f"Loading VAE {name}")
         return VAE_models[name](input_width=img_size[0], input_height=img_size[1])
@@ -88,7 +88,7 @@ def load_models(dit_ckpt, vae_ckpt, default_img_size, dit_use_mem=False):
         print(f"Loading VAE from ckpt {os.path.abspath(vae_ckpt)}...")
         if vae_ckpt.endswith(".pt"):
             # Load size info from the checkpoint
-            vae_ckpt = torch.load(vae_ckpt)
+            vae_ckpt = torch.load(vae_ckpt, map_location=default_device)
             if "model" in vae_ckpt:
                 model_name = vae_ckpt["model"]
             else:
@@ -102,26 +102,39 @@ def load_models(dit_ckpt, vae_ckpt, default_img_size, dit_use_mem=False):
 
     if vae is None:
         # Populate size with defaults specified
-        vae = load_vae("vit-l-small", default_img_size)
-
-        # vae = load_vae("vit-mim", (64, 64)) #for vit_mim this is downsampled image size
+        #vae = load_vae("vit-l-small", default_img_size)
+        vae = load_vae("vit-mim", (64, 64)) # for vit_mim this is downsampled image size
 
     vae = vae.to(default_device)
     print(f"VAE has input dim {vae.input_width}x{vae.input_height}")
 
     # ------------
 
+    mem_encoder = None
+    if mem_encoder_ckpt is not None:
+        print(f"Loading mem embedder from ckpt {os.path.abspath(mem_encoder_ckpt)}...")
+        # Load size info from the checkpoint
+        mem_encoder_ckpt = torch.load(mem_encoder_ckpt, map_location=default_device)
+        model_name = mem_encoder_ckpt["model"]
+        mem_encoder = load_vae(model_name, (mem_encoder_ckpt["input_width"], mem_encoder_ckpt["input_height"]))
+        mem_encoder.load_state_dict(mem_encoder_ckpt["vae_state_dict"])
+
+        mem_encoder = mem_encoder.to(default_device)
+        print(f"Mem encoder has input dim {mem_encoder.input_width}x{mem_encoder.input_height}")
+
+    # ------------
+
     def load_dit(name, ckpt=None):
         print(f"Loading DiT {name}")
         if dit_use_mem:
+            assert mem_encoder_ckpt is not None
             return DiT_models[name](
                 input_w=vae.seq_w,
                 input_h=vae.seq_h,
                 in_channels=vae.latent_dim,
                 patch_size=2,
-
-                # TODO: change
-                memory_input_dim=vae.seq_w * vae.seq_h * vae.latent_dim
+                #memory_input_dim=vae.seq_w * vae.seq_h * vae.latent_dim
+                memory_input_dim=mem_encoder.mem_dim
             )
         else:
             return DiT_models[name](
@@ -135,7 +148,7 @@ def load_models(dit_ckpt, vae_ckpt, default_img_size, dit_use_mem=False):
     if dit_ckpt is not None:
         print(f"Loading DiT from ckpt {os.path.abspath(dit_ckpt)}...")
         if dit_ckpt.endswith(".pt"):
-            ckpt = torch.load(dit_ckpt)
+            ckpt = torch.load(dit_ckpt, map_location=default_device)
             if "model" in ckpt:
                 model_name = ckpt["model"]
             else:
@@ -148,7 +161,7 @@ def load_models(dit_ckpt, vae_ckpt, default_img_size, dit_use_mem=False):
 
     if model is None:
         if dit_use_mem:
-            model = load_dit("DiT-S/2-Small-MiT")
+            model = load_dit("DiT-S/2-Small-MiT-MiM")
         else:
             model = load_dit("DiT-S/2-Small")
 
@@ -156,7 +169,7 @@ def load_models(dit_ckpt, vae_ckpt, default_img_size, dit_use_mem=False):
 
     print(f"DiT has input dim {model.input_w}x{model.input_h}, patch size {model.patch_size}")
 
-    return model, vae
+    return model, vae, mem_encoder
 
 
 def get_dataloader(batch, num_workers, **kwargs):

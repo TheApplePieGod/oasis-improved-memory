@@ -19,7 +19,7 @@ import os
 
 
 def train_vae(args):
-    _, model = load_models(None, args.vae_ckpt, parse_img_size(args.default_img_size))
+    _, model, _ = load_models(None, args.vae_ckpt, None, parse_img_size(args.default_img_size))
     model = model.train()
     model.requires_grad_(True)
 
@@ -60,9 +60,7 @@ def train_vae(args):
             X = X.squeeze(1).to(default_device)
             optimizer.zero_grad()
 
-            print("original x shape ", X.shape)
             X, x_prime, dist, latent = model.autoencode(X)
-            print(X.shape, x_prime.shape)
 
             l1 = torch.nn.functional.mse_loss(x_prime, X, reduction='sum') / X.shape[0]
             dkl = (0.5 * torch.sum(dist.mean ** 2 + dist.var - dist.logvar - 1)) / X.shape[0] * args.kl_scale
@@ -115,19 +113,21 @@ def train_vae(args):
 
 
 def train_dit(args):
-    model, vae = load_models(
+    model, vae, mem_encoder = load_models(
         args.dit_ckpt,
         args.vae_ckpt,
+        args.mem_encoder_ckpt,
         default_img_size=parse_img_size(args.default_img_size),
         dit_use_mem=args.use_memory
     )
     model = model.train()
     model.requires_grad_(True)
-    if vae:
-        vae = vae.eval()
-        img_size = (vae.input_width, vae.input_height)
-    else:
-        img_size = (model.input_w, model.input_h)
+    vae = vae.eval()
+    img_size = (vae.input_width, vae.input_height)
+
+    if mem_encoder:
+        #mem_encoder = lambda x: torch.flatten(x, start_dim=2)
+        mem_encoder = mem_encoder.eval()
 
     # params
     max_timesteps = 1000
@@ -165,9 +165,6 @@ def train_dit(args):
         #max_datapoints=100
     )
 
-    if args.use_memory:
-        memory_embedder = lambda x: torch.flatten(x, start_dim=2)
-
     writer = SummaryWriter(f"logs/{args.dit_exp_name}/summary")
     for epoch in range(args.epochs):
         avg_train_loss = 0
@@ -195,8 +192,10 @@ def train_dit(args):
                 # TODO: reuse this? doesnt really work bc batch size can vary
                 memory_bank = MemoryBank(model.memory_input_dim, batch_size=B)
 
-                #mem_embeddings = memory_embedder(X_pre_vae)
-                mem_embeddings = memory_embedder(X)
+                with torch.no_grad():
+                    mem_embeddings = mem_encoder.encode_memory(X_pre_vae)
+                    #mem_embeddings = mem_encoder(X)
+
                 m = []
                 for s in range(T):
                     memory_bank.push(mem_embeddings[:, s])
@@ -371,6 +370,12 @@ if __name__ == "__main__":
         type=lambda x: bool(strtobool(x)),
         default=True,
         help="Whether or not to use the memory bank for diffusion",
+    )
+    parse.add_argument(
+        "--mem-encoder-ckpt",
+        type=str,
+        help="Path to memory encoder ckpt",
+        default=None
     )
     parse.add_argument(
         "--data-dir",

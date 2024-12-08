@@ -77,7 +77,7 @@ def main(args):
     torch.mps.manual_seed(0)
 
     # Test
-    _, vae = load_models(None, args.vae_ckpt, (0, 0))
+    _, vae, _ = load_models(None, args.vae_ckpt, None, (0, 0))
 
     # Baseline
     #_, vae = load_models(None, f"./vit-l-20.safetensors", (0, 0))

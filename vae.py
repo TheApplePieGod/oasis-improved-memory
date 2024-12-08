@@ -336,22 +336,38 @@ class AutoencoderKL(nn.Module):
     def get_last_layer(self):
         return self.predictor.weight
     
+
 class MiM_Encode(AutoencoderKL):
     def __init__(self, quantize_steps=10, input_width=16, input_height=16, **kwargs):
+        super().__init__(input_width=input_width, input_height=input_height, **kwargs)
         self.downsampled_size = (input_width, input_height)
         self.quantize_steps = quantize_steps
-        super().__init__(input_width=input_width, input_height=input_height, **kwargs)
+        self.mem_dim = self.seq_w * self.seq_h * self.latent_dim
+
+    def encode(self, x):
+        q_input = self.quantize_image(x)
+        return super().encode(q_input)
 
     def autoencode(self, input, sample_posterior=True):
         q_input = self.quantize_image(input)
-        print("input shape", input.shape, q_input.shape)
         return q_input, *super().autoencode(q_input, sample_posterior)[1:]
+
+    def encode_memory(self, input, sample_posterior=True):
+        # B T C H W -> B T D
+        B = input.shape[0]
+        input = rearrange(input, "b t c h w -> (b t) c h w")
+        q_input = self.quantize_image(input)
+        if sample_posterior:
+            sample = self.encode(q_input).sample()
+        else:
+            sample = self.encode(q_input).mode()
+        return rearrange(sample, "(b t) d c -> b t (d c)", b=B)
 
     def quantize_image(self, frame):
         _, _, H, W = frame.shape
         # new_size = (int(H * downsample), int(W * downsample))
         frame = F.interpolate(frame, self.downsampled_size, mode='bilinear', align_corners=False)
-        
+
         step_size = 1 / self.quantize_steps
         frame = torch.round(frame / step_size) * step_size
         return frame

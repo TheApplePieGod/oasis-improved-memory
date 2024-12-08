@@ -28,9 +28,18 @@ def main(args):
 
     print(f"Generating with seed {seed}")
 
-    model, vae = load_models(args.oasis_ckpt, args.vae_ckpt, (0, 0), args.use_memory)
+    model, vae, mem_encoder = load_models(
+        args.oasis_ckpt,
+        args.vae_ckpt,
+        args.mem_encoder_ckpt,
+        (0, 0),
+        args.use_memory
+    )
     model = model.eval()
     vae = vae.eval()
+    if mem_encoder:
+        #mem_encoder = lambda x: torch.flatten(x, start_dim=2)
+        mem_encoder = mem_encoder.eval()
 
     # sampling params
     n_prompt_frames = args.n_prompt_frames
@@ -69,6 +78,7 @@ def main(args):
     # sampling inputs
     x = x.to(default_device)
     actions = actions.to(default_device)
+    x_pre_vae = x
 
     #x = x[:, 80:]
     #actions = actions[:, 80:]
@@ -93,12 +103,14 @@ def main(args):
     alphas_cumprod = rearrange(alphas_cumprod, "T -> T 1 1 1")
 
     if args.use_memory:
-        memory_embedder = lambda x: torch.flatten(x, start_dim=2)
         memory_bank = MemoryBank(model.memory_input_dim, 1)
 
         # Populate bank with prompt memory embeddings
+        with torch.no_grad():
+            #mem_embeddings = mem_encoder.encode_memory(x, False)
+            mem_embeddings = mem_encoder.encode_memory(x_pre_vae, False)
+
         m = []
-        mem_embeddings = memory_embedder(x)
         for i, s in enumerate(range(n_prompt_frames)):
             memory_bank.push(mem_embeddings[:, s])
             m.append(memory_bank.get_snapshot())
@@ -152,7 +164,10 @@ def main(args):
 
         if args.use_memory:
             # Populate bank with generated frame
-            mem_embedding = memory_embedder(x[:, -1:])
+            last_frame = rearrange(x[:, -1], "b c h w -> b (h w) c").float()
+            with torch.no_grad():
+                last_frame = (vae.decode(last_frame / args.vae_scale) + 1) / 2
+                mem_embedding = mem_encoder.encode_memory(last_frame, False)
             memory_bank.push(mem_embedding[:, -1])
             m.append(memory_bank.get_snapshot())
 
@@ -255,6 +270,12 @@ if __name__ == "__main__":
         type=lambda x: bool(strtobool(x)),
         default=True,
         help="Whether or not to use the memory bank for diffusion",
+    )
+    parse.add_argument(
+        "--mem-encoder-ckpt",
+        type=str,
+        help="Path to memory encoder ckpt",
+        default=None
     )
     parse.add_argument("--ddim-steps", type=int, help="How many DDIM steps?", default=10)
 
