@@ -382,14 +382,13 @@ def DiT_S_2_Small_MiT(**kwargs):
         **kwargs
     )
 
-def DiT_S_2_Small_MiT(**kwargs):
+def DiT_S_2_Small_MiT_NoFrame(**kwargs):
     return DiT_Memory(
-        name="DiT-S/2-Small-MiT",
+        name="DiT-S/2-Small-MiT-NoFrame",
         mem_embed_name="mit",
         max_memory_seq_len=16,
         memory_condition_dim=32,
-        frame_seq_len=3,
-        frame_patch_size=8,
+        frame_seq_len=0,
         external_cond_dim=25,
         hidden_size=768,
         depth=14,
@@ -423,4 +422,5 @@ DiT_models = {
     "DiT-S/2-XS": DiT_S_2_XS,
     "DiT-S/2-Small-MiT": DiT_S_2_Small_MiT,
     "DiT-S/2-Small-MiT-MiM": DiT_S_2_Small_MiT_MiM,
+    "DiT-S/2-Small-MiT-NoFrame": DiT_S_2_Small_MiT_NoFrame,
 }

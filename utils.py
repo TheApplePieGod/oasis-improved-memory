@@ -161,7 +161,7 @@ def load_models(dit_ckpt, vae_ckpt, mem_encoder_ckpt, default_img_size, dit_use_
 
     if model is None:
         if dit_use_mem:
-            model = load_dit("DiT-S/2-Small-MiT-MiM")
+            model = load_dit("DiT-S/2-Small-MiT-NoFrame")
         else:
             model = load_dit("DiT-S/2-Small")
 

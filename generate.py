@@ -51,6 +51,12 @@ def main(args):
     stabilization_level = 15
     img_size = (vae.input_width, vae.input_height)
 
+    # get alphas
+    betas = sigmoid_beta_schedule(max_noise_level).float().to(default_device)
+    alphas = 1.0 - betas
+    alphas_cumprod = torch.cumprod(alphas, dim=0)
+    alphas_cumprod = rearrange(alphas_cumprod, "T -> T 1 1 1")
+
     # get prompt image/video
     load_fixed_datapoint = False
     if load_fixed_datapoint:
@@ -80,9 +86,6 @@ def main(args):
     actions = actions.to(default_device)
     x_pre_vae = x
 
-    #x = x[:, 80:]
-    #actions = actions[:, 80:]
-
     # vae encoding
     B, T = x.shape[:2]
     x = rearrange(x, "b t c h w -> (b t) c h w")
@@ -90,17 +93,6 @@ def main(args):
         with autocast(default_device, dtype=torch.half):
             x = vae.encode(x).mean * args.vae_scale
     x = rearrange(x, "(b t) (h w) c -> b t c h w", t=T, h=vae.seq_h, w=vae.seq_w)
-
-    x = x[:, :n_prompt_frames]
-
-    # clip total frames
-    total_frames = min(total_frames, actions.shape[1])
-
-    # get alphas
-    betas = sigmoid_beta_schedule(max_noise_level).float().to(default_device)
-    alphas = 1.0 - betas
-    alphas_cumprod = torch.cumprod(alphas, dim=0)
-    alphas_cumprod = rearrange(alphas_cumprod, "T -> T 1 1 1")
 
     if args.use_memory:
         memory_bank = MemoryBank(model.memory_input_dim, 1)
@@ -119,6 +111,13 @@ def main(args):
             # requires an additional condition
             if i == 0:
                 m.append(memory_bank.get_snapshot())
+
+    #x = x[:, 80:]
+    #actions = actions[:, 80:]
+
+    # clip total frames
+    x = x[:, :n_prompt_frames]
+    total_frames = min(total_frames, actions.shape[1])
 
     # sampling loop
     for i in tqdm(range(n_prompt_frames, total_frames)):

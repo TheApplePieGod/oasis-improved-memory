@@ -145,21 +145,26 @@ class MiT(nn.Module):
         # Iterate in reverse since the last memory snapshot should have the most frame context available and
         # the size of the snapshots and frame context will likely differ
         for i, s in enumerate(reversed(m)):
-            frame_ctx = f[:, -frame_seq_len-i:max(f.shape[1]-i, 0)]
+            frame_ctx_padded = None
+            if f is not None and frame_seq_len > 0:
+                frame_ctx = f[:, -frame_seq_len-i:max(f.shape[1]-i, 0)]
 
-            # Add 0s for missing frame context
-            padding_len = frame_seq_len - frame_ctx.shape[1]
-            zeros = torch.zeros((frame_ctx.shape[0], padding_len, *frame_ctx.shape[2:]), device=frame_ctx.device)
-            frame_ctx_padded = torch.cat([zeros, frame_ctx], dim=1)
+                # Add 0s for missing frame context
+                padding_len = frame_seq_len - frame_ctx.shape[1]
+                zeros = torch.zeros((frame_ctx.shape[0], padding_len, *frame_ctx.shape[2:]), device=frame_ctx.device)
+                frame_ctx_padded = torch.cat([zeros, frame_ctx], dim=1)
 
             tok = self.fmt(s.memory, frame_ctx_padded) # -> B T1+T2 D
             tokens.append(tok)
 
-            # Add 1s for the frame portion of the mask and zeros for the padded part of the frame ctx
-            tok_per_frame = (tok.shape[1] - s.memory.shape[1]) // frame_seq_len
-            zeros = torch.zeros((f.shape[0], padding_len * tok_per_frame), device=tok.device)
-            ones = torch.ones((f.shape[0], frame_ctx.shape[1] * tok_per_frame), device=tok.device)
-            mask = torch.cat([s.mask, zeros, ones], dim=1)
+            if frame_ctx_padded is not None:
+                # Add 1s for the frame portion of the mask and zeros for the padded part of the frame ctx
+                tok_per_frame = (tok.shape[1] - s.memory.shape[1]) // frame_seq_len
+                zeros = torch.zeros((f.shape[0], padding_len * tok_per_frame), device=tok.device)
+                ones = torch.ones((f.shape[0], frame_ctx.shape[1] * tok_per_frame), device=tok.device)
+                mask = torch.cat([s.mask, zeros, ones], dim=1)
+            else:
+                mask = s.mask
             masks.append(mask)
 
         # Reverse again so the tokens/masks are back in the correct sequence
