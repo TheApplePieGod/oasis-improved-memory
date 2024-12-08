@@ -71,6 +71,7 @@ class FMT(nn.Module):
     def memory_embed(self, m):
         if self.memory_linear is not None:
             m = self.memory_linear(m)
+        m = torch.nn.functional.normalize(m, p=2, dim=-1)
         m += self.memory_embedding
         return m
 
@@ -81,6 +82,8 @@ class FMT(nn.Module):
         # TODO: add some sort of positional embeddings?
         # Rotary embeddings were being weird
         f = rearrange(f, "(b t) h w d -> b (t h w) d", t=T)
+        f = torch.nn.functional.normalize(f, p=2, dim=-1)
+        f += self.frame_embedding
         return f
 
     def forward(self, m: torch.tensor, f: Optional[torch.tensor]):
@@ -139,6 +142,8 @@ class MiT(nn.Module):
 
         tokens = []
         masks = []
+        # Iterate in reverse since the last memory snapshot should have the most frame context available and
+        # the size of the snapshots and frame context will likely differ
         for i, s in enumerate(reversed(m)):
             frame_ctx = f[:, -frame_seq_len-i:max(f.shape[1]-i, 0)]
 
@@ -157,8 +162,9 @@ class MiT(nn.Module):
             mask = torch.cat([s.mask, zeros, ones], dim=1)
             masks.append(mask)
 
-        tokens = torch.vstack(tokens)
-        masks = torch.vstack(masks)
+        # Reverse again so the tokens/masks are back in the correct sequence
+        tokens = torch.vstack(list(reversed(tokens)))
+        masks = torch.vstack(list(reversed(masks)))
 
         for enc in self.encoders:
             tokens = enc(tokens, src_key_padding_mask=masks)
