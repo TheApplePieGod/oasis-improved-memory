@@ -145,12 +145,12 @@ def main(args):
             x_curr = x_curr[:, start_frame:]
             t = t[:, start_frame:]
             t_next = t_next[:, start_frame:]
-            m_curr = m[start_frame:]
 
             # get model predictions
             with torch.no_grad():
                 with autocast(default_device, dtype=torch.half):
                     if args.use_memory:
+                        m_curr = m[start_frame:]
                         v = model(x_curr, t, m_curr, actions[:, start_frame : i + 1])
                     else:
                         v = model(x_curr, t, actions[:, start_frame : i + 1])

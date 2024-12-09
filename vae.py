@@ -422,8 +422,24 @@ def ViT_MiM(**kwargs):
         **kwargs
     )
 
+def ViT_MiM_FullRes(**kwargs):
+    return MiM_Encode(
+        latent_dim=8,
+        quantize_steps=1,
+        name="vit-mim-fullres",
+        patch_size=8,
+        enc_dim=256,
+        enc_depth=4,
+        enc_heads=8,
+        dec_dim=256,
+        dec_depth=8,
+        dec_heads=8,
+        **kwargs
+    )
+
 VAE_models = {
     "vit-l-20-shallow-encoder": ViT_L_20_Shallow_Encoder,
     "vit-l-small": ViT_L_Small,
-    "vit-mim": ViT_MiM
+    "vit-mim": ViT_MiM,
+    "vit-mim-fullres": ViT_MiM_FullRes,
 }
