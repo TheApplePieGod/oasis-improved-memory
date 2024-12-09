@@ -369,16 +369,12 @@ def DiT_S_2_XS(**kwargs):
     )
 
 def DiT_S_2_Small_Linear(**kwargs):
-    if "patch_size" in kwargs:
-        kwargs.pop("patch_size")
-
     return DiT_Memory(
         name="DiT-S/2-Small-Linear",
         mem_embed_name="linear",
         max_memory_seq_len=16,
         memory_condition_dim=32,
         frame_seq_len=0,
-        patch_size=1,
         external_cond_dim=25,
         hidden_size=768,
         depth=14,

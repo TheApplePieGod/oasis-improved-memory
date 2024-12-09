@@ -341,7 +341,7 @@ class AutoencoderKL(nn.Module):
 class MiM_Encode(AutoencoderKL):
     def __init__(self, quantize_steps=10, input_width=16, input_height=16, **kwargs):
         super().__init__(input_width=input_width, input_height=input_height, **kwargs)
-        self.downsampled_size = (input_width, input_height)
+        self.downsampled_size = (input_height, input_width)
         self.quantize_steps = quantize_steps
         self.mem_dim = self.seq_w * self.seq_h * self.latent_dim
 
@@ -366,9 +366,7 @@ class MiM_Encode(AutoencoderKL):
 
     def quantize_image(self, frame):
         _, _, H, W = frame.shape
-        # new_size = (int(H * downsample), int(W * downsample))
         frame = F.interpolate(frame, self.downsampled_size, mode='bilinear', align_corners=False)
-
         step_size = 1 / self.quantize_steps
         frame = torch.round(frame / step_size) * step_size
         return frame
@@ -424,16 +422,16 @@ def ViT_MiM(**kwargs):
 
 def ViT_MiM_FullRes(**kwargs):
     return MiM_Encode(
-        latent_dim=8,
+        latent_dim=16,
         quantize_steps=1,
         name="vit-mim-fullres",
-        patch_size=8,
-        enc_dim=256,
-        enc_depth=4,
-        enc_heads=8,
-        dec_dim=256,
-        dec_depth=8,
-        dec_heads=8,
+        patch_size=20,
+        enc_dim=1024,
+        enc_depth=6,
+        enc_heads=16,
+        dec_dim=1024,
+        dec_depth=12,
+        dec_heads=16,
         **kwargs
     )
 

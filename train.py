@@ -126,7 +126,6 @@ def train_dit(args):
     img_size = (vae.input_width, vae.input_height)
 
     if mem_encoder:
-        #mem_encoder = lambda x: torch.flatten(x, start_dim=2)
         mem_encoder = mem_encoder.eval()
 
     # params
@@ -194,7 +193,6 @@ def train_dit(args):
 
                 with torch.no_grad():
                     mem_embeddings = mem_encoder.encode_memory(X_pre_vae)
-                    #mem_embeddings = mem_encoder(X)
 
                 m = []
                 for s in range(T):

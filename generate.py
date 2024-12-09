@@ -38,7 +38,6 @@ def main(args):
     model = model.eval()
     vae = vae.eval()
     if mem_encoder:
-        #mem_encoder = lambda x: torch.flatten(x, start_dim=2)
         mem_encoder = mem_encoder.eval()
 
     # sampling params
@@ -98,7 +97,6 @@ def main(args):
 
         # Populate bank with prompt memory embeddings
         with torch.no_grad():
-            #mem_embeddings = mem_encoder.encode_memory(x, False)
             mem_embeddings = mem_encoder.encode_memory(x_pre_vae, False)
 
             """
