@@ -219,8 +219,8 @@
             }
         </style>
 
-        <title>TODO Title Here</title>
-        <meta property="og:title" content="TODO Title Here">
+        <title>Oasis-Memory: Improving DiT Temporal Consistency with Memory</title>
+        <meta property="og:title" content="Oasis-Memory: Improving DiT Temporal Consistency with Memory">
         <meta charset="UTF-8">
     </head>
     <body>
@@ -232,8 +232,9 @@
                 <table class="header" align="left">
                     <tbody><tr>
                         <td colspan="4">
-                            <span style="font-size: 32px; font-family: 'Courier New', Courier, monospace; /* Adds fallbacks */">TODO Title
-                                Here</span>
+                            <span style="font-size: 32px; font-family: 'Courier New', Courier, monospace; /* Adds fallbacks */">
+                                Oasis-Memory: Improving DiT Temporal Consistency with Memory
+                            </span>
                         </td>
                     </tr>
                         <tr>
@@ -271,19 +272,15 @@
             </div>
             <div class="main-content-block">
                 <!--You can embed an image like this:-->
-                <div class="side-by-side-container">
-                    <div class="side-by-side-group">
-                        <img src="67960BlogPost_files/gifs/data/data_0_walk.gif" class="side-by-side-image" />
-                        <div class="caption">Ground truth</div>
-                    </div>
-                    <div class="side-by-side-group">
-                        <img src="67960BlogPost_files/gifs/results/better_baseline_walk.gif" class="side-by-side-image" />
-                        <div class="caption">Baseline</div>
-                    </div>
-                    <div class="side-by-side-group">
-                        <img src="67960BlogPost_files/gifs/results/dit_linear_mim_10k_walk.gif" class="side-by-side-image" />
-                        <div class="caption">Ours</div>
-                    </div>
+                <img src="67960BlogPost_files/gifs/header.gif" class="side-by-side-image" />
+                <div style="width: 100%; display: flex; align-items: center; justify-content: center; text-align: center;">
+                    <div style="width: 15%;"></div>
+                    <div class="caption">Original</div>
+                    <div style="width: 26%;"></div>
+                    <div class="caption">Baseline</div>
+                    <div style="width: 28%;"></div>
+                    <div class="caption">Ours</div>
+                    <div style="width: 15%;"></div>
                 </div>
             </div>
             <div class="margin-right-block">
@@ -298,7 +295,7 @@
             <div class="main-content-block">
                 <h1>Introduction</h1>
                 The recent Oasis model uses a diffusion transformer (DiT) to emulate Minecraft in real-time while responding to user
-                input [1]. While this model is not the first of its kind, it made significant advances in performance to allow real-time
+                input <a href="#ref_1">[1]</a>. While this model is not the first of its kind, it made significant advances in performance to allow real-time
                 gameplay. However, the model exhibits limited memory over time due to its constrained frame-based history architecture.
                 For example, if the player turns around or looks up, it is likely that the landscape surrounding them will change. Our
                 goal is to investigate techniques for improving memory in DiTs to increase the temporal consistency of generated video.
@@ -317,19 +314,20 @@
                 <h1>Background and Related Work</h1>
                 Oasis itself was inspired by several similar projects such as the DOOM model presented in <i>Diffusion Models Are
                     Real-Time
-                    Game Engines</i> [2]. This model is similar in spirit to Oasis, but differs significantly in implementation in that
+                    Game Engines</i> <a href="#ref_2">[2]</a>. This model is similar in spirit to Oasis, but differs significantly in implementation in that
                 it did
                 not use transformers. We investigated this paper for ideas for solving the memory problem, but found that it was not
                 directly addressed. This seemed to be less of a problem in this paper since frames in DOOM are more consistent than in
                 Minecraft, with the entire game taking place in a similar environment. To gain inspiration for our memory system
-                structure, we also referenced the paper World Models [3]. This paper focuses on building generative models that
-                reproduce common reinforcement learning environments. This model includes a VAE that encodes frames, along with an RNN
+                structure, we also referenced the paper World Models <a href="#ref_3">[3]</a>. This paper focuses on building generative models that
+                reproduce common reinforcement learning environments. This model includes a variational autoencoder (VAE) that encodes frames, along with
+                a recurrent neural network
                 memory system that predicts future outputs of the VAE. The next step of the model takes into account both the output of
                 the VAE and the memory system’s predicted output. We took some inspiration from this structure when designing our model.
                 <div class="line-break"></div>
                 We used Oasis as a starting point in developing our model. Most of the structure remains the same aside from the memory
                 enhancements we will discuss. However, Oasis did not have open source training code, so this was developed from scratch.
-                We used the paper Diffusion Forcing as a reference for how to train diffusion transformers [4].
+                We used the paper Diffusion Forcing as a reference for how to train diffusion transformers <a href="#ref_4">[4]</a>.
             </div>
             <div class="margin-right-block" style="transform: translate(0%, -100%);"> <!-- you can move the margin notes up and down with translate -->
             </div>
@@ -344,14 +342,14 @@
                 <h1>Baseline Setup</h1>
                 <div class="side-by-side-group">
                     <img src="67960BlogPost_files/oasis-dit.png" class="side-by-side-image" style="max-width: 500px"/>
-                    <div class="caption">Oasis’ autoregressive, transformer-based architecture [1]</div>
+                    <div class="caption">Oasis’ autoregressive, transformer-based architecture <a href="#ref_1">[1]</a></div>
                 </div>
                 <div class="line-break"></div>
                 The base Oasis model consists of two primary components: the variational autoencoder (VAE) and the diffusion transformer
                 (DiT). The VAE is responsible for learning a compressed representation of an individual frame, whose smaller
                 dimensionality aids in the diffusion process. The DiT takes in a series of VAE-encoded frames and a condition vector
                 derived from the user input to generate the next frame, which are VAE latents that are subsequently decoded. Diffusion
-                sampling is performed using DDIM, which speeds up generation [9].
+                sampling is performed using DDIM, which speeds up generation <a href="#ref_9">[9]</a>.
                 <div class="line-break"></div>
 
                 In order to create a baseline to compare against, we needed to set up a training environment that would allow us to
@@ -360,9 +358,9 @@
                 <div class="line-break"></div>
 
                 We first trained the VAE to reconstruct arbitrary frames using a fairly standard self-supervised training process, which
-                incorporates MSE reconstruction loss, KL-divergence loss, and LPIPS loss [5]. We used the same number of model
+                incorporates MSE reconstruction loss, KL-divergence loss, and LPIPS loss <a href="#ref_5">[5]</a>. We used the same number of model
                 parameters as the original Oasis model except for the frame resolution, which we halved from (640x320) to (320x160) for
-                faster training. We trained using a large subset of the original dataset [6] (around 3000 videos) for around 20k
+                faster training. We trained using a large subset of the original dataset <a href="#ref_6">[6]</a> (around 3000 videos) for around 20k
                 iterations so that the VAE would generalize fairly well.
                 <div class="line-break"></div>
                 <div class="line-break"></div>
@@ -386,25 +384,22 @@
                 for a few seconds, look up into the sky for a few seconds, and then look back down and continue walking for a few
                 seconds. Since we did not have access to the program used to create the original dataset, we manually set the proper
                 resolution and game settings, and we used OpenAI’s inverse dynamics model to infer the user input from the recorded
-                videos [6].
+                videos <a href="#ref_6">[6]</a>.
                 <div class="line-break"></div>
                 <div class="line-break"></div>
                 <div class="side-by-side-group">
                     <img src="67960BlogPost_files/gifs/data/data_19_walk.gif" class="side-by-side-image" style="max-width: 500px"/>
-                    <div class="caption">Example Dataset Video [1]</div>
+                    <div class="caption">Example Dataset Video <a href="#ref_1">[1]</a></div>
                 </div>
                 <div class="line-break"></div>
                 <div class="line-break"></div>
 
                 Using this dataset, we trained the DiT to predict latents of our pretrained VAE. To do this, we closely followed the
-                training process outlined in the diffusion forcing paper [4]. We computed a scaling factor for our VAE latents to ensure
-                we sampled our latents from a correctly-parametrized distribution [7]. Similarly to the VAE, we used the same model
+                training process outlined in the diffusion forcing paper <a href="#ref_4">[4]</a>. We computed a scaling factor for our VAE latents to ensure
+                we sampled our latents from a correctly-parametrized distribution <a href="#ref_7">[7]</a>. Similarly to the VAE, we used the same model
                 parameters as the original Oasis model except for the context window length, which we reduced from 32 to 24 for faster
                 training. With our dataset, we were able to get coherent results in a reasonable amount of time with around 10k
                 iterations.
-                <div class="line-break"></div>
-
-                [Baseline results (include oasis)]
             </div>
             <div class="margin-right-block">
             </div>
@@ -493,7 +488,7 @@
                 The last and most challenging scenario we evaluate our models under is “sky”. In sky, we start with our memory bank
                 filled with encodings of a user looking forwards into a given biome, but with its prompt frames looking straight upwards
                 into the sky. Models that achieve strong temporal consistency should, when the action stream sends “look down” actions,
-                generate frames that match the landscape and biome of the memory bank’s initial prompt encodings.
+                generate frames that match the landscape and biome of the memory bank’s initial contents.
             </div>
             <div class="margin-right-block" style="transform: translate(0%, -100%);"> <!-- you can move the margin notes up and down with translate -->
             </div>
@@ -515,26 +510,22 @@
                 time.
                 <div class="line-break"></div>
                 <div class="line-break"></div>
-                <div class="side-by-side-container">
-                    <div class="side-by-side-group">
-                        <img src="67960BlogPost_files/gifs/data/data_0_walk.gif" class="side-by-side-image" />
-                        <div class="caption">Ground truth - Walk</div>
-                    </div>
-                    <div class="side-by-side-group">
-                        <img src="67960BlogPost_files/gifs/results/better_baseline_walk.gif" class="side-by-side-image" />
-                        <div class="caption">Baseline - Walk</div>
-                    </div>
+                <img src="67960BlogPost_files/gifs/results/better_baseline_walk.gif" class="side-by-side-image" />
+                <div style="width: 100%; display: flex; align-items: center; justify-content: center; text-align: center;">
+                    <div style="width: 15%;"></div>
+                    <div class="caption">Ground truth - Walk</div>
+                    <div style="width: 40%;"></div>
+                    <div class="caption">Baseline - Walk</div>
+                    <div style="width: 15%;"></div>
                 </div>
                 <div class="line-break"></div>
-                <div class="side-by-side-container">
-                    <div class="side-by-side-group">
-                        <img src="67960BlogPost_files/gifs/data/data_0_sky.gif" class="side-by-side-image" />
-                        <div class="caption">Ground truth - Sky</div>
-                    </div>
-                    <div class="side-by-side-group">
-                        <img src="67960BlogPost_files/gifs/results/baseline_sky.gif" class="side-by-side-image" />
-                        <div class="caption">Baseline - Sky</div>
-                    </div>
+                <img src="67960BlogPost_files/gifs/results/baseline_sky.gif" class="side-by-side-image" />
+                <div style="width: 100%; display: flex; align-items: center; justify-content: center; text-align: center;">
+                    <div style="width: 15%;"></div>
+                    <div class="caption">Ground truth - Sky</div>
+                    <div style="width: 40%;"></div>
+                    <div class="caption">Baseline - Sky</div>
+                    <div style="width: 15%;"></div>
                 </div>
 
                 <h4>MiT + MC-Small</h4>
@@ -545,34 +536,28 @@
                 MiT, we observed results that were largely indistinguishable from the baseline. Even when we injected vastly different
                 memories into the memory bank, our generation was unchanged. After researching this further, we believe that our DiT was
                 learning to ignore our memory context due to MiT being trained concurrently and not providing useful input at early
-                iterations [8]. We tried rerunning this experiment without providing frame context to MiT in case the model was simply
+                iterations <a href="#ref_8">[8]</a>. We tried rerunning this experiment without providing frame context to MiT in case the model was simply
                 overfitting to that part of the input, however the results were unchanged.
                 <div class="line-break"></div>
                 <div class="line-break"></div>
-                <div class="side-by-side-container">
-                    <div class="side-by-side-group">
-                        <img src="67960BlogPost_files/gifs/data/data_0_walk.gif" class="side-by-side-image" />
-                        <div class="caption">Ground truth - Walk</div>
-                    </div>
-                    <div class="side-by-side-group">
-                        <img src="67960BlogPost_files/gifs/results/dit_mit_mim_10k_walk.gif" class="side-by-side-image" />
-                        <div class="caption">Experimental - Walk</div>
-                    </div>
+                <img src="67960BlogPost_files/gifs/results/dit_mit_mim_10k_walk.gif" class="side-by-side-image" />
+                <div style="width: 100%; display: flex; align-items: center; justify-content: center; text-align: center;">
+                    <div style="width: 15%;"></div>
+                    <div class="caption">Ground truth - Walk</div>
+                    <div style="width: 40%;"></div>
+                    <div class="caption">Experimental - Walk</div>
+                    <div style="width: 15%;"></div>
                 </div>
                 <div class="line-break"></div>
-                <div class="side-by-side-container">
-                    <div class="side-by-side-group">
-                        <img src="67960BlogPost_files/gifs/data/data_0_sky.gif" class="side-by-side-image" />
-                        <div class="caption">Ground truth - Sky [Desert Memory]</div>
-                    </div>
-                    <div class="side-by-side-group">
-                        <img src="67960BlogPost_files/gifs/results/dit_mit_mim_10k_sky.gif" class="side-by-side-image" />
-                        <div class="caption">Experimental - Sky [Desert Memory]</div>
-                    </div>
-                    <div class="side-by-side-group">
-                        <img src="67960BlogPost_files/gifs/results/dit_mit_mim_10k_sky_14.gif" class="side-by-side-image" />
-                        <div class="caption">Experimental - Sky [Ocean Memory]</div>
-                    </div>
+                <img src="67960BlogPost_files/gifs/results/dit_mit_mim_10k_sky.gif" class="side-by-side-image" />
+                <div style="width: 100%; display: flex; align-items: center; justify-content: center; text-align: center;">
+                    <div style="width: 15%;"></div>
+                    <div class="caption">Ground truth - Sky [Desert Memory]</div>
+                    <div style="width: 26%;"></div>
+                    <div class="caption">Experimental - Sky [Desert Memory]</div>
+                    <div style="width: 28%;"></div>
+                    <div class="caption">Experimental - Sky [Ocean Memory]</div>
+                    <div style="width: 15%;"></div>
                 </div>
 
                 <h4>Linear + MC-Small</h4>
@@ -589,49 +574,37 @@
                 receiving the action specifying this, resulting in the double pivot effect seen in our sky generations.
                 <div class="line-break"></div>
                 <div class="line-break"></div>
-                <div class="side-by-side-container">
-                    <div class="side-by-side-group">
-                        <img src="67960BlogPost_files/gifs/data/data_0_walk.gif" class="side-by-side-image" />
-                        <div class="caption">Ground truth - Walk</div>
-                    </div>
-                    <div class="side-by-side-group">
-                        <img src="67960BlogPost_files/gifs/results/dit_linear_mim_10k_walk.gif" class="side-by-side-image" />
-                        <div class="caption">Experimental - Walk</div>
-                    </div>
-                    <div class="side-by-side-group">
-                        <img src="67960BlogPost_files/gifs/results/dit_linear_mim_10k_walk_repeat_embeddings.gif" class="side-by-side-image" />
-                        <div class="caption">Experimental - Walk [Frozen Embeddings]</div>
-                    </div>
+                <img src="67960BlogPost_files/gifs/results/dit_linear_mim_10k_walk.gif" class="side-by-side-image" />
+                <div style="width: 100%; display: flex; align-items: center; justify-content: center; text-align: center;">
+                    <div style="width: 15%;"></div>
+                    <div style="width: 30%;" class="caption">Ground truth - Walk</div>
+                    <div style="width: 26%;"></div>
+                    <div style="width: 30%;" class="caption">Experimental - Walk</div>
+                    <div style="width: 28%;"></div>
+                    <div style="width: 30%;" class="caption">Experimental - Walk<br/> [Frozen Embeddings]</div>
+                    <div style="width: 15%;"></div>
                 </div>
                 <div class="line-break"></div>
-                <div class="side-by-side-container">
-                    <div class="side-by-side-group">
-                        <img src="67960BlogPost_files/gifs/data/data_0_sky.gif" class="side-by-side-image" />
-                        <div class="caption">Ground truth - Sky [Desert Memory]</div>
-                    </div>
-                    <div class="side-by-side-group">
-                        <img src="67960BlogPost_files/gifs/results/dit_linear_mim_10k_sky1.gif" class="side-by-side-image" />
-                        <div class="caption">Experimental - Sky [Desert Memory]</div>
-                    </div>
-                    <div class="side-by-side-group">
-                        <img src="67960BlogPost_files/gifs/results/dit_linear_mim_10k_sky_14.gif" class="side-by-side-image" />
-                        <div class="caption">Experimental - Sky [Ocean Memory]</div>
-                    </div>
+                <img src="67960BlogPost_files/gifs/results/dit_linear_mim_10k_sky_1.gif" class="side-by-side-image" />
+                <div style="width: 100%; display: flex; align-items: center; justify-content: center; text-align: center;">
+                    <div style="width: 15%;"></div>
+                    <div class="caption">Ground truth - Sky [Desert Memory]</div>
+                    <div style="width: 26%;"></div>
+                    <div class="caption">Experimental - Sky [Desert Memory]</div>
+                    <div style="width: 28%;"></div>
+                    <div class="caption">Experimental - Sky [Ocean Memory]</div>
+                    <div style="width: 15%;"></div>
                 </div>
                 <div class="line-break"></div>
-                <div class="side-by-side-container">
-                    <div class="side-by-side-group">
-                        <img src="67960BlogPost_files/gifs/results/dit_linear_mim_10k_sky_18.gif" class="side-by-side-image" />
-                        <div class="caption">Experimental - Sky [Cherry Memory]</div>
-                    </div>
-                    <div class="side-by-side-group">
-                        <img src="67960BlogPost_files/gifs/results/dit_linear_mim_10k_sky_26.gif" class="side-by-side-image" />
-                        <div class="caption">Experimental - Sky [Dark Forest Memory]</div>
-                    </div>
-                    <div class="side-by-side-group">
-                        <img src="67960BlogPost_files/gifs/results/dit_linear_mim_10k_sky_42.gif" class="side-by-side-image" />
-                        <div class="caption">Experimental - Sky [Ice Memory]</div>
-                    </div>
+                <img src="67960BlogPost_files/gifs/results/dit_linear_mim_10k_sky_2.gif" class="side-by-side-image" />
+                <div style="width: 100%; display: flex; align-items: center; justify-content: center; text-align: center;">
+                    <div style="width: 15%;"></div>
+                    <div class="caption">Experimental - Sky [Cherry Memory]</div>
+                    <div style="width: 26%;"></div>
+                    <div class="caption">Experimental - Sky [Dark Forest Memory]</div>
+                    <div style="width: 28%;"></div>
+                    <div class="caption">Experimental - Sky [Ice Memory]</div>
+                    <div style="width: 15%;"></div>
                 </div>
 
                 <h4>Linear + MC-Large</h4>
@@ -648,34 +621,26 @@
 
                 <div class="line-break"></div>
                 <div class="line-break"></div>
-                <div class="side-by-side-container">
-                    <div class="side-by-side-group">
-                        <img src="67960BlogPost_files/gifs/data/data_0_walk.gif" class="side-by-side-image" />
-                        <div class="caption">Ground truth - Walk</div>
-                    </div>
-                    <div class="side-by-side-group">
-                        <img src="67960BlogPost_files/gifs/results/dit_linear_mim_fullres_8k_walk.gif" class="side-by-side-image" />
-                        <div class="caption">Experimental - Walk</div>
-                    </div>
-                    <div class="side-by-side-group">
-                        <img src="67960BlogPost_files/gifs/results/dit_linear_mim_fullres_8k_walk_repeat_embeddings.gif" class="side-by-side-image" />
-                        <div class="caption">Experimental - Walk [Frozen Embeddings]</div>
-                    </div>
+                <img src="67960BlogPost_files/gifs/results/dit_linear_mim_fullres_8k_walk.gif" class="side-by-side-image" />
+                <div style="width: 100%; display: flex; align-items: center; justify-content: center; text-align: center;">
+                    <div style="width: 15%;"></div>
+                    <div style="width: 30%;" class="caption">Ground truth - Walk</div>
+                    <div style="width: 26%;"></div>
+                    <div style="width: 30%;" class="caption">Experimental - Walk</div>
+                    <div style="width: 28%;"></div>
+                    <div style="width: 30%;" class="caption">Experimental - Walk<br/> [Frozen Embeddings]</div>
+                    <div style="width: 15%;"></div>
                 </div>
                 <div class="line-break"></div>
-                <div class="side-by-side-container">
-                    <div class="side-by-side-group">
-                        <img src="67960BlogPost_files/gifs/data/data_0_sky.gif" class="side-by-side-image" />
-                        <div class="caption">Ground truth - Sky [Desert Memory]</div>
-                    </div>
-                    <div class="side-by-side-group">
-                        <img src="67960BlogPost_files/gifs/results/dit_linear_mim_fullres_8k_sky.gif" class="side-by-side-image" />
-                        <div class="caption">Experimental - Sky [Desert Memory]</div>
-                    </div>
-                    <div class="side-by-side-group">
-                        <img src="67960BlogPost_files/gifs/results/dit_linear_mim_fullres_8k_sky_14.gif" class="side-by-side-image" />
-                        <div class="caption">Experimental - Sky [Ocean Memory]</div>
-                    </div>
+                <img src="67960BlogPost_files/gifs/results/dit_linear_mim_fullres_8k_sky.gif" class="side-by-side-image" />
+                <div style="width: 100%; display: flex; align-items: center; justify-content: center; text-align: center;">
+                    <div style="width: 15%;"></div>
+                    <div class="caption">Ground truth - Sky [Desert Memory]</div>
+                    <div style="width: 26%;"></div>
+                    <div class="caption">Experimental - Sky [Desert Memory]</div>
+                    <div style="width: 28%;"></div>
+                    <div class="caption">Experimental - Sky [Ocean Memory]</div>
+                    <div style="width: 15%;"></div>
                 </div>
             </div>
             <div class="margin-right-block">
@@ -725,23 +690,23 @@
                     <a href="https://oasis-model.github.io/">https://oasis-model.github.io/</a><br><br>
                     <a id="ref_2"></a>[2] D. Valevski, Y. Leviathan, M. Arar, and S. Fruchter, “Diffusion Models are Real-Time Game
                     Engines,” [Online]. Available: <a href="https://arxiv.org/pdf/2408.14837">https://arxiv.org/pdf/2408.14837</a><br><br>
-                    <a id="ref_2"></a>[3] D. Ha and J. Schmidhuber, “World Models.” [Online]. Available: <a
+                    <a id="ref_3"></a>[3] D. Ha and J. Schmidhuber, “World Models.” [Online]. Available: <a
                         href="https://arxiv.org/pdf/2408.14837">https://arxiv.org/pdf/2408.14837</a><br><br>
-                    <a id="ref_2"></a>[4] B. Chen, D. M. Monso, Y. Du, M. Simchowitz, R. Tedrake, and V. Sitzmann, “Diffusion Forcing:
+                    <a id="ref_4"></a>[4] B. Chen, D. M. Monso, Y. Du, M. Simchowitz, R. Tedrake, and V. Sitzmann, “Diffusion Forcing:
                     Next-token Prediction Meets Full-Sequence Diffusion.” [Online]. Available: <a
                         href="https://arxiv.org/abs/2407.01392">https://arxiv.org/abs/2407.01392</a><br><br>
-                    <a id="ref_2"></a>[5] R. Zhang, P. Isola, A. A. Efros, E. Shechtman, and O. Wang, “The Unreasonable Effectiveness of
+                    <a id="ref_5"></a>[5] R. Zhang, P. Isola, A. A. Efros, E. Shechtman, and O. Wang, “The Unreasonable Effectiveness of
                     Deep Features as a Perceptual Metric,” in 2018 IEEE/CVF Conference on Computer Vision and Pattern Recognition, IEEE,
                     Jun. 2018. [Online]. Available: <a
                         href="https://doi.org/10.1109/cvpr.2018.00068">https://doi.org/10.1109/cvpr.2018.00068</a><br><br>
-                    <a id="ref_2"></a>[6] B. Baker et al., “Video PreTraining (VPT): Learning to Act by Watching Unlabeled Online Videos,”
+                    <a id="ref_6"></a>[6] B. Baker et al., “Video PreTraining (VPT): Learning to Act by Watching Unlabeled Online Videos,”
                     OpenAI. [Online]. Available: <a href="https://arxiv.org/abs/2206.11795">https://arxiv.org/abs/2206.11795</a><br><br>
-                    <a id="ref_2"></a>[7] R. Rombach, A. Blattmann, D. Lorenz, P. Esser, and B. Ommer, “High-Resolution Image Synthesis with
+                    <a id="ref_7"></a>[7] R. Rombach, A. Blattmann, D. Lorenz, P. Esser, and B. Ommer, “High-Resolution Image Synthesis with
                     Latent Diffusion Models.” [Online]. Available: <a
                         href="https://arxiv.org/abs/2112.10752">https://arxiv.org/abs/2112.10752</a><br><br>
-                    <a id="ref_2"></a>[8] “jbetker,” “Surrogate Losses for Diffusion Models – Non_Interactive – Software & ML.” [Online].
+                    <a id="ref_8"></a>[8] “jbetker,” “Surrogate Losses for Diffusion Models – Non_Interactive – Software & ML.” [Online].
                     Available: <a href="https://nonint.com/2022/04/04/190/">https://nonint.com/2022/04/04/190/</a><br><br>
-                    <a id="ref_2"></a>[9] J. Song, C. Meng, and S. Ermon, “Denoising Diffusion Implicit Models.” [Online]. Available: <a
+                    <a id="ref_9"></a>[9] J. Song, C. Meng, and S. Ermon, “Denoising Diffusion Implicit Models.” [Online]. Available: <a
                         href="https://arxiv.org/abs/2010.02502">https://arxiv.org/abs/2010.02502</a><br><br>
                 </div>
             </div>
