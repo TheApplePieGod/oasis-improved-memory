@@ -34,6 +34,8 @@
                 border-right: 1px solid #DDD;
                 padding: 8px 8px 8px 8px;
                 font-family: "HelveticaNeue-Light", "Helvetica Neue Light", "Helvetica Neue", Helvetica, Arial, "Lucida Grande", sans-serif;#"Avenir";
+                font-size: 18px;
+                line-height: 24px;
             }
 
             .margin-left-block {
@@ -191,10 +193,13 @@
                 width: 50px; /* Optional: Adds space between the div and the paragraph */
             }
 
+            .line-break {
+                height: 20px;
+            }
+
             .side-by-side-container {
                 display: flex;
                 flex-direction: row;
-                margin-bottom: 30px;
             }
 
             .side-by-side-group {
@@ -206,6 +211,11 @@
             .side-by-side-image {
                 width: 95%;
                 margin-bottom: 20px;
+            }
+
+            .caption {
+                font-style: italic;
+                font-size: 15px;
             }
         </style>
 
@@ -227,10 +237,13 @@
                     </tr>
                         <tr>
                             <td align="left">
-                                <span style="font-size:17px"><a href="https://web.mit.edu/phillipi/www/blog_template/your_website">Your name</a></span>
+                                <span style="font-size:17px"><a href="https://evanthompson.site">Evan Thompson</a></span>
                             </td>
                             <td align="left">
-                                <span style="font-size:17px"><a href="https://web.mit.edu/phillipi/www/blog_template/your_partner's_website">Your partner's name</a></span>
+                                <span style="font-size:17px"><a href="https://github.com/lowtorola">Lowell Torola</a></span>
+                            </td>
+                            <td align="left">
+                                <span style="font-size:17px"><a href="https://github.com/hstennes">Hank Stennes</a></span>
                             </td>
                         </tr><tr>
                             <td colspan="4" align="left"><span style="font-size:18px">Final project for 6.7960, MIT</span></td>
@@ -253,10 +266,22 @@
             </div>
             <div class="main-content-block">
                 <!--You can embed an image like this:-->
-                <img src="67960BlogPost_files/your_image_here.png" width="512px/">
+                <div class="side-by-side-container">
+                    <div class="side-by-side-group">
+                        <img src="67960BlogPost_files/gifs/data/data_0_walk.gif" class="side-by-side-image" />
+                        <div class="caption">Ground truth</div>
+                    </div>
+                    <div class="side-by-side-group">
+                        <img src="67960BlogPost_files/gifs/results/better_baseline_walk.gif" class="side-by-side-image" />
+                        <div class="caption">Baseline</div>
+                    </div>
+                    <div class="side-by-side-group">
+                        <img src="67960BlogPost_files/gifs/results/dit_linear_mim_10k_walk.gif" class="side-by-side-image" />
+                        <div class="caption">Ours</div>
+                    </div>
+                </div>
             </div>
             <div class="margin-right-block">
-                Caption for the image.
             </div>
         </div>
 
@@ -267,11 +292,9 @@
             </div>
             <div class="main-content-block">
                 <h1>Introduction</h1>
-                The recent Oasis model uses a diffusion transformer to emulate Minecraft in real-time while responding to user input. While this model is not the first of its kind, it made significant advances in performance to allow real-time gameplay. However, the model exhibits limited memory over time. For example, if the player turns around or looks up, it is likely that the landscape surrounding them will change. Our goal is to investigate techniques for improving memory in DiTs to increase the temporal consistency of generated video. We believe that this improvement is crucial for models like Oasis to be practical in a gaming setting or for other use cases.
-                We used Oasis as a starting point in developing our model. Most of the structure remains the same aside from the memory enhancements we will discuss. However, Oasis did not have open source training code so this was developed from scratch.
+                The recent Oasis model uses a diffusion transformer (DiT) to emulate Minecraft in real-time while responding to user input. While this model is not the first of its kind, it made significant advances in performance to allow real-time gameplay. However, the model exhibits limited memory over time due to its constrained frame-based history architecture. For example, if the player turns around or looks up, it is likely that the landscape surrounding them will change. Our goal is to investigate techniques for improving memory in DiTs to increase the temporal consistency of generated video. We believe that this improvement is crucial for models like Oasis to be practical in a gaming setting or for other use cases.
             </div>
             <div class="margin-right-block">
-                Margin note that clarifies some detail #main-content-block for intro section.
             </div>
         </div>
 
@@ -282,10 +305,11 @@
             </div>
             <div class="main-content-block">
                 <h1>Background and Related Work</h1>
-
+                Oasis itself was inspired by several similar projects such as the DOOM model presented in Diffusion Models Are Real-Time Game Engines. This model is similar in spirit to Oasis, but differs significantly in implementation in that it did not use transformers. We investigated this paper for ideas for solving the memory problem, but found that it was not directly addressed. This seemed to be less of a problem in this paper since frames in DOOM are more consistent than in Minecraft, with the entire game taking place in a similar environment. To gain inspiration for our memory system structure, we also referenced the paper World Models. This paper focuses on building generative models that reproduce common reinforcement learning environments. This model includes a VAE that encodes frames, along with an RNN memory system that predicts future outputs of the VAE. The next step of the model takes into account both the output of the VAE and the memory system’s predicted output. We took some inspiration from this structure when designing our model.
+                <div class="line-break"></div>
+                We used Oasis as a starting point in developing our model. Most of the structure remains the same aside from the memory enhancements we will discuss. However, Oasis did not have open source training code, so this was developed from scratch. We used the paper Diffusion Forcing as a reference for how to train diffusion transformers.
             </div>
             <div class="margin-right-block" style="transform: translate(0%, -100%);"> <!-- you can move the margin notes up and down with translate -->
-                Interestingly, Plato also asked if X does Y, in <a href="#ref_1">[1]</a>.
             </div>
         </div>
 
@@ -295,9 +319,119 @@
             <div class="margin-left-block">
             </div>
             <div class="main-content-block">
-                <h1>Method and Setup</h1>
+                <h1>Baseline Setup</h1>
+                <div class="side-by-side-group">
+                    <img src="67960BlogPost_files/oasis-dit.png" class="side-by-side-image" style="max-width: 500px"/>
+                    <div class="caption">Oasis Architecture [TODO: cite]</div>
+                </div>
+                <div class="line-break"></div>
+                The base Oasis model consists of two primary components: the variational autoencoder (VAE) and the diffusion transformer (DiT). The VAE is responsible for learning a compressed representation of an individual frame, whose smaller dimensionality aids in the diffusion process. The DiT takes in a series of VAE-encoded frames and a condition vector derived from the user input to generate the next frame, which are VAE latents that are subsequently decoded. Diffusion sampling is performed using DDIM [cite], which speeds up generation.
+                <div class="line-break"></div>
+                [Discuss ViT-VAE and DiT / diffusion forcing more in depth]
+                <div class="line-break"></div>
+
+                In order to create a baseline to compare against, we needed to set up a training environment that would allow us to train the baseline model given our compute and time constraints. The original Oasis repository did not provide any code or guidance for training, so we devised our own scheme.
+                <div class="line-break"></div>
+
+                [Talk about dataset and realtime video/action loading? Idk if they give a shit about that but i spent a long time on it nah probably not gonna include]
+                <div class="line-break"></div>
+
+                We first trained the VAE to reconstruct arbitrary frames using a fairly standard self-supervised training process, which incorporates MSE reconstruction loss, KL-divergence loss, and LPIPS loss [cite]. We used the same model parameters as the original paper except for the frame resolution, which we halved from (640x320) to (320x160) for faster training. We trained using a large subset of the original dataset [cite] (around 3000 videos) for around 20k iterations so that the VAE would generalize fairly well.
+
+                <div class="line-break"></div>
+                <div class="line-break"></div>
+                <div class="side-by-side-container">
+                    <div class="side-by-side-group">
+                        <img src="67960BlogPost_files/vae-oasis.png" class="side-by-side-image" />
+                        <div class="caption">VAE Reconstruction - Oasis (Right)</div>
+                    </div>
+                    <div class="side-by-side-group">
+                        <img src="67960BlogPost_files/vae-ours.png" class="side-by-side-image" />
+                        <div class="caption">VAE Reconstruction - Ours (Right)</div>
+                    </div>
+                </div>
+                <div class="line-break"></div>
+                <div class="line-break"></div>
+
+                In order to train the DiT, we needed to overfit on a smaller dataset. The training was too slow per iteration and we would need tens of thousands of iterations over the full dataset before we would get meaningfully coherent results. To solve this problem, we authored a custom labeled dataset of 44 videos that we could overfit on. To maximize usefulness for later benchmarking, we recorded two videos in each biome, totalling 22 biomes, where the player would walk around for a few seconds, look up into the sky for a few seconds, and then look back down and continue walking for a few seconds. Since we did not have access to the program used to create the original dataset, we manually set the proper resolution and game settings, and we used OpenAI’s inverse dynamics model [https://github.com/openai/Video-Pre-Training] to infer the user input from the recorded videos.
+
+                <div class="line-break"></div>
+                <div class="line-break"></div>
+                <div class="side-by-side-group">
+                    <img src="67960BlogPost_files/gifs/data/data_19_walk.gif" class="side-by-side-image" style="max-width: 500px"/>
+                    <div class="caption">Example Dataset Video</div>
+                </div>
+                <div class="line-break"></div>
+                <div class="line-break"></div>
+
+                Using this dataset, we trained the DiT to predict latents of our pretrained VAE. To do this, we closely followed the training process outlined in the diffusion forcing paper [cite]. (Explain the loss functions, noising steps, snr, etc.). (Explain VAE scaling factor and how we computed it, cite github page/paper). Similarly to the VAE, we used the same model parameters as the original paper except for the context window length, which we reduced from 32 to 24 for faster training. With our dataset, we were able to get coherent results in a reasonable amount of time with around 10k iterations.
+                <div class="line-break"></div>
+
+                [Baseline results (include oasis)]
             </div>
             <div class="margin-right-block">
+            </div>
+        </div>
+
+        <!-- -->
+
+        <div class="content-margin-container" id="does_x_do_y">
+            <div class="margin-left-block">
+            </div>
+            <div class="main-content-block">
+                <h1>Experimental Setup</h1>
+                <h4>Goals</h4>
+                Our baseline model has many visible issues. It quickly diverges from the prompt frames and devolves into other environments, and is overall still very noisy. These issues would likely be mitigated with more data and training, but a goal of our experiments is to improve consistency even with a smaller number of training iterations. Another fundamental issue with the baseline is its lack of memory when looking away from and back to a specific environment. This cannot be solved with more training, and we will propose modifications to the original architecture to solve this issue.
+                <h4>Proposed Modifications</h4>
+                <div class="side-by-side-group">
+                    <img src="67960BlogPost_files/oasis-memory.jpg" class="side-by-side-image" style="max-width: 500px"/>
+                    <div class="caption">Oasis-Memory architecture. Existing components highlighted beige and new components highlighted green.</div>
+                </div>
+                <div class="line-break"></div>
+                <div class="line-break"></div>
+
+                We propose a modified model, Oasis-Memory, which amends a medium-term memory component to the existing Oasis model.
+
+                <div class="line-break"></div>
+
+                The first step in the memory pipeline is the memory encoder module. It processes a frame from the input sequence and generates an encoded memory vector that represents the frame. In our experiments, we tested two different encoder implementations: one that downsamples, quantizes, and massively compresses the input frame using a VAE, and one that simply uses the original resolution VAE. Both output the same dimension embedding that is passed off to the memory bank module.
+
+                <div class="line-break"></div>
+
+                The memory bank stores a fixed-length context of memory encodings. We considered several replacement policies for this memory bank, but settled on a FIFO system where a new encoding is pushed to the queue when the cosine difference between the encoded frame and the most-recently-added entry is above a certain threshold. With this technique, we only add data to the memory bank when the environment changes sufficiently, which allows memory over a much longer context length. For each frame in the sequence, the memory bank produces a ‘snapshot’ of memory up to that point, which is a stacked matrix of all current entries, with zero-padding for empty entries. 
+
+                <div class="line-break"></div>
+
+                The memory embedder is the final module in the memory pipeline. Its function is to take a given memory snapshot for a frame in the sequence and return an embedding that will ultimately be concatenated with the conditioning vector in the DiT. For our experiments, we tested two implementations of the embedder: a linear module which simply directly maps the memory snapshot matrix to an embedding, and a more involved memory transformer module (MiT).
+
+                <div class="line-break"></div>
+                <div class="line-break"></div>
+                <div class="side-by-side-group">
+                    <img src="67960BlogPost_files/mit.jpg" class="side-by-side-image" style="max-width: 500px"/>
+                    <div class="caption">Architecture for the MiT memory embedder module.</div>
+                </div>
+                <div class="line-break"></div>
+                <div class="line-break"></div>
+
+                MiT takes in both the memory snapshot as well as the last k frames as input. The inputs are then embedded, tokenized, and fed to a standard non-causal transformer model that outputs the final memory embedding. We hypothesized that giving the memory embedder access to the past few frames would allow it to make better decisions when generating the final embedding.
+
+                <h4>Benchmarking</h4>
+
+                All of our experimentation kept our VAE frame encoder fixed. Our modified DiT was retrained for each experiment on our much smaller overfitting dataset. For every experiment, we kept our training process consistent at ~10k iterations. To evaluate the effectiveness of our different memory-conditioning approaches, we designed several challenging scenarios to benchmark the models. In each, we want to improve temporal consistency while still respecting the user input action stream.
+
+                <div class="line-break"></div>
+
+                The first scenario is “walk”. In walk, the user model is walking forward through a biome with a fixed forward-facing view angle. This tests the model’s ability to preserve terrain and biome information even with constant user model motion and shows a particular configuration’s ability to achieve baseline usability in a scenario where memory shouldn’t be required for next-frame generation (since the frame context should always have similar-looking frames available).
+
+                <div class="line-break"></div>
+
+                Our second chosen scenario is “walk-frozen”. Walk-frozen is identical to walk, except we disable the memory module’s input so that it always returns the same snapshot of the initial conditioning frames. This effectively evaluates the effectiveness of our module’s eviction policy and exactly what benefits having a live-updating memory confers over simply acting as an extended frame context.
+
+                <div class="line-break"></div>
+
+                The last and most challenging scenario we evaluate our models under is “sky”. In sky, we start with our memory bank filled with frames of a user looking forwards into a given biome, but with its view model looking straight upwards into the sky. Models that achieve strong temporal consistency should, when the action stream sends “look down” actions, generate frames that match the landscape and biome of the memory bank’s conditioning frames.
+            </div>
+            <div class="margin-right-block" style="transform: translate(0%, -100%);"> <!-- you can move the margin notes up and down with translate -->
             </div>
         </div>
 
@@ -309,94 +443,153 @@
             <div class="main-content-block">
                 <h1>Experimentation and Results</h1>
                 <h4>Baseline</h4>
+                Our experimental control performed frame generation with our memory module disabled. We observed frame generations that were extremely temporally inconsistent in all situations. Walk/walk-frozen had dramatic landscape and biome shift during our short generation window and sky generated random-looking noise that seemed biased towards green colors and leaf-like textures (likely due to the prevalence of trees in our overfit dataset). These results were definitely partly due to our short training time, but this was expected as part of our goal was to improve consistency despite the short training time.
+
+                <div class="line-break"></div>
+                <div class="line-break"></div>
                 <div class="side-by-side-container">
                     <div class="side-by-side-group">
                         <img src="67960BlogPost_files/gifs/data/data_0_walk.gif" class="side-by-side-image" />
-                        <div>Ground truth - Walk</div>
+                        <div class="caption">Ground truth - Walk</div>
                     </div>
                     <div class="side-by-side-group">
-                        <img src="67960BlogPost_files/gifs/results/baseline_walk_10k.gif" class="side-by-side-image" />
-                        <div>Experimental - Walk</div>
+                        <img src="67960BlogPost_files/gifs/results/better_baseline_walk.gif" class="side-by-side-image" />
+                        <div class="caption">Baseline - Walk</div>
                     </div>
                 </div>
+                <div class="line-break"></div>
                 <div class="side-by-side-container">
                     <div class="side-by-side-group">
                         <img src="67960BlogPost_files/gifs/data/data_0_sky.gif" class="side-by-side-image" />
-                        <div>Ground truth - Sky</div>
+                        <div class="caption">Ground truth - Sky</div>
                     </div>
                     <div class="side-by-side-group">
                         <img src="67960BlogPost_files/gifs/results/baseline_sky.gif" class="side-by-side-image" />
-                        <div>Experimental - Sky</div>
+                        <div class="caption">Baseline - Sky</div>
                     </div>
                 </div>
 
                 <h4>MiT + MiM-Small</h4>
+                The next experiment utilized our custom transformer-based memory encoder (MiT) and stored our memory frames in a highly-compressed format (MiM-small). In contrast to our lofty expectations for this memory encoder, we observed results that were largely indistinguishable from the baseline. Even when we passed different embeddings to our memory module, our generation was unchanged. After researching this further, we believe that our DiT was learning to ignore our memory due to our transformer being trained concurrently and not providing useful input at early iterations (even after removing the frame context, the DiT’s output did not change given vastly different memory conditions) (TODO cite).
+
+                <div class="line-break"></div>
+                <div class="line-break"></div>
                 <div class="side-by-side-container">
                     <div class="side-by-side-group">
                         <img src="67960BlogPost_files/gifs/data/data_0_walk.gif" class="side-by-side-image" />
-                        <div>Ground truth - Walk</div>
+                        <div class="caption">Ground truth - Walk</div>
                     </div>
                     <div class="side-by-side-group">
                         <img src="67960BlogPost_files/gifs/results/dit_mit_mim_10k_walk.gif" class="side-by-side-image" />
-                        <div>Experimental - Walk</div>
+                        <div class="caption">Experimental - Walk</div>
                     </div>
                 </div>
+                <div class="line-break"></div>
                 <div class="side-by-side-container">
                     <div class="side-by-side-group">
                         <img src="67960BlogPost_files/gifs/data/data_0_sky.gif" class="side-by-side-image" />
-                        <div>Ground truth - Sky [Desert Memory]</div>
+                        <div class="caption">Ground truth - Sky [Desert Memory]</div>
                     </div>
                     <div class="side-by-side-group">
                         <img src="67960BlogPost_files/gifs/results/dit_mit_mim_10k_sky.gif" class="side-by-side-image" />
-                        <div>Experimental - Sky [Desert Memory]</div>
+                        <div class="caption">Experimental - Sky [Desert Memory]</div>
                     </div>
                     <div class="side-by-side-group">
                         <img src="67960BlogPost_files/gifs/results/dit_mit_mim_10k_sky_14.gif" class="side-by-side-image" />
-                        <div>Experimental - Sky [Ocean Memory]</div>
+                        <div class="caption">Experimental - Sky [Ocean Memory]</div>
                     </div>
                 </div>
 
                 <h4>Linear + MiM-Small</h4>
+                After we decided that the outputs of MiT were likely being ignored by the DiT, we decided to try a simple one-layer linear encoding of our memory snapshots. This change dramatically changed our diffusion outputs. For walk, we observed substantial improvement in temporal consistency with the frames retaining biome color palettes and the landscape’s shape and motion extrapolating smoothly from the prompt frames while respecting the action stream. Walk-frozen was similar to walk, but noticeably reproduced landscape structure from the prompt frames while still walking the view model forward. This shows that the DiT is attending to the information in the memory bank as it generates frames which match the prompt rather than just the frame context. Sky was dramatically improved as the memory bank’s prompt is respected when the view model looks down rather than descending immediately into random noise, again showing that the memory bank’s contents are respected by the DiT. We did observe a strange second “look down” during this step, but we realized that this was likely due to our overfit DiT model deciding that it should look down before actually receiving the action specifying this, resulting in the double pivot effect seen in our sky generations.
+
+                <div class="line-break"></div>
+                <div class="line-break"></div>
                 <div class="side-by-side-container">
                     <div class="side-by-side-group">
                         <img src="67960BlogPost_files/gifs/data/data_0_walk.gif" class="side-by-side-image" />
-                        <div>Ground truth - Walk</div>
+                        <div class="caption">Ground truth - Walk</div>
                     </div>
                     <div class="side-by-side-group">
                         <img src="67960BlogPost_files/gifs/results/dit_linear_mim_10k_walk.gif" class="side-by-side-image" />
-                        <div>Experimental - Walk</div>
+                        <div class="caption">Experimental - Walk</div>
                     </div>
                     <div class="side-by-side-group">
                         <img src="67960BlogPost_files/gifs/results/dit_linear_mim_10k_walk_repeat_embeddings.gif" class="side-by-side-image" />
-                        <div>Experimental - Walk [Frozen Embeddings]</div>
+                        <div class="caption">Experimental - Walk [Frozen Embeddings]</div>
                     </div>
                 </div>
+                <div class="line-break"></div>
                 <div class="side-by-side-container">
                     <div class="side-by-side-group">
                         <img src="67960BlogPost_files/gifs/data/data_0_sky.gif" class="side-by-side-image" />
-                        <div>Ground truth - Sky [Desert Memory]</div>
+                        <div class="caption">Ground truth - Sky [Desert Memory]</div>
                     </div>
                     <div class="side-by-side-group">
                         <img src="67960BlogPost_files/gifs/results/dit_linear_mim_10k_sky1.gif" class="side-by-side-image" />
-                        <div>Experimental - Sky [Desert Memory]</div>
+                        <div class="caption">Experimental - Sky [Desert Memory]</div>
                     </div>
                     <div class="side-by-side-group">
                         <img src="67960BlogPost_files/gifs/results/dit_linear_mim_10k_sky_14.gif" class="side-by-side-image" />
-                        <div>Experimental - Sky [Ocean Memory]</div>
+                        <div class="caption">Experimental - Sky [Ocean Memory]</div>
                     </div>
                 </div>
+                <div class="line-break"></div>
                 <div class="side-by-side-container">
                     <div class="side-by-side-group">
                         <img src="67960BlogPost_files/gifs/results/dit_linear_mim_10k_sky_18.gif" class="side-by-side-image" />
-                        <div>Experimental - Sky [Cherry Memory]</div>
+                        <div class="caption">Experimental - Sky [Cherry Memory]</div>
                     </div>
                     <div class="side-by-side-group">
                         <img src="67960BlogPost_files/gifs/results/dit_linear_mim_10k_sky_26.gif" class="side-by-side-image" />
-                        <div>Experimental - Sky [Dark Forest Memory]</div>
+                        <div class="caption">Experimental - Sky [Dark Forest Memory]</div>
                     </div>
                     <div class="side-by-side-group">
                         <img src="67960BlogPost_files/gifs/results/dit_linear_mim_10k_sky_42.gif" class="side-by-side-image" />
-                        <div>Experimental - Sky [Ice Memory]</div>
+                        <div class="caption">Experimental - Sky [Ice Memory]</div>
+                    </div>
+                </div>
+
+                <h4>Linear + MiM-Large</h4>
+                We designed our last experiment to evaluate the effects of compressing our memory entries. We set up our memory module to store raw VAE latents and thus simply act as an extended frame context as a control to see if we were actually achieving memory size compression while retaining the generation quality of extended, full-quality frame context (similar to what Oasis had at their disposal). 
+
+                <div class="line-break"></div>
+
+                For walk, we observed slightly better than baseline terrain structure preservation but the biome and color palette information in the frame prompt was immediately lost. Walk-frozen preserved some fine-grained details like block outlines that were lost in walk, but was also unable to preserve any color information. Sky was difficult to distinguish from baseline, indicating that the performance of our uncompressed memory was highly compromised.
+
+                <div class="line-break"></div>
+
+                If we had managed to produce effective use of a memory transformer or large memory size (which would be possible with more compute resources) compression would become even more important as our linear encoder is naturally fairly cheap. Our results indicate that our model is actually more performant with memory compression. This is highly encouraging, and we believe that the compression might reduce the “noisiness” of our memory context and better allow the DiT to extract important information from our simple linear embedding.
+
+                <div class="line-break"></div>
+                <div class="line-break"></div>
+                <div class="side-by-side-container">
+                    <div class="side-by-side-group">
+                        <img src="67960BlogPost_files/gifs/data/data_0_walk.gif" class="side-by-side-image" />
+                        <div class="caption">Ground truth - Walk</div>
+                    </div>
+                    <div class="side-by-side-group">
+                        <img src="67960BlogPost_files/gifs/results/dit_linear_mim_fullres_8k_walk.gif" class="side-by-side-image" />
+                        <div class="caption">Experimental - Walk</div>
+                    </div>
+                    <div class="side-by-side-group">
+                        <img src="67960BlogPost_files/gifs/results/dit_linear_mim_fullres_8k_walk_repeat_embeddings.gif" class="side-by-side-image" />
+                        <div class="caption">Experimental - Walk [Frozen Embeddings]</div>
+                    </div>
+                </div>
+                <div class="line-break"></div>
+                <div class="side-by-side-container">
+                    <div class="side-by-side-group">
+                        <img src="67960BlogPost_files/gifs/data/data_0_sky.gif" class="side-by-side-image" />
+                        <div class="caption">Ground truth - Sky [Desert Memory]</div>
+                    </div>
+                    <div class="side-by-side-group">
+                        <img src="67960BlogPost_files/gifs/results/dit_linear_mim_fullres_8k_sky.gif" class="side-by-side-image" />
+                        <div class="caption">Experimental - Sky [Desert Memory]</div>
+                    </div>
+                    <div class="side-by-side-group">
+                        <img src="67960BlogPost_files/gifs/results/dit_linear_mim_fullres_8k_sky_14.gif" class="side-by-side-image" />
+                        <div class="caption">Experimental - Sky [Ocean Memory]</div>
                     </div>
                 </div>
             </div>
@@ -411,7 +604,9 @@
             </div>
             <div class="main-content-block">
                 <h1>Implications and limitations</h1>
-                Let's end with some discussion of the implications and limitations.
+                Our experiments show that including a selectively-updated memory context in Oasis’ latent diffusion successfully visibly improved the temporal consistency during both consistent and inconsistent frame streams. The memory context was clearly respected by the DiT’s generations (thanks to our walk-frozen experiments) and resulted in drastic qualitative improvement even with our relatively short diffusion training process. 
+                <div class="line-break"></div>
+                We believe that the promising results of our memory augmentation to Oasis suggests great utility for selectively-updated memory in various video-generation use cases. Our model uses greatly simplified approaches for tasks such as memory compression, replacement, encoding, and conditioning. With additional time and resources, we believe that future work could train simple models to further enhance the impact of an external memory while maintaining the benefits conferred by our memory implementation. We believe that if the MiT were trained with a reconstruction loss on the full video dataset the DiT may actually see the benefit of a more complex memory encoding. Regardless, any fully-trained DiT should see at least some benefit from including a memory module such as ours thanks to our compression and latent encoding steps.
             </div>
             <div class="margin-right-block">
             </div>
